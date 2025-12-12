@@ -168,7 +168,8 @@ async function calculateTabTime(hostname, now, isActive) {
 async function settleTabTime(url, isActive, isNewVisit = false) {
     await loadStatsCache();
     const hostname = getHostname(url);
-    if (!hostname) return;
+
+    if (!hostname || url.startWith('chrome://') || hostname===chrome.runtime.id) return;
     const now = Date.now();
     let isChanged = await calculateTabTime(hostname, now, isActive);
     if (isNewVisit) {
@@ -187,7 +188,7 @@ async function trackAllTabsBatch() {
     let isChanged = false;
     for (const tab of tabs) {
         const hostname = getHostname(tab.url);
-        if (!hostname || tab.url.startsWith('chrome://')) continue;
+        if (!hostname || tab.url.startsWith('chrome://') || hostname === chrome.runtime.id) continue;
         if (await calculateTabTime(hostname, now, tab.active)) isChanged = true;
     }
     if (isChanged) scheduleCacheSave();
@@ -198,7 +199,7 @@ async function trackAllTabsBatch() {
 // ===========================================================
 
 async function sendFrictionMessage(tabId, url) {
-    if (!url || url.startsWith('chrome://')) return;
+    if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
 
     const items = await chrome.storage.local.get({
         blockedUrls: [],
