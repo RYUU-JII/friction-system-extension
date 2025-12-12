@@ -1,0 +1,256 @@
+/* dashboard.css */
+:root {
+    /* Color Palette - Light Mode */
+    --bg-main: #f8fafc;
+    --bg-sidebar: #ffffff;
+    --accent: #6366f1; /* Indigo */
+    --accent-hover: #4f46e5;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    
+    /* Stats Colors */
+    --color-blocked: #ef4444; /* Red */
+    --color-safe: #10b981; /* Emerald/Green */
+}
+
+body.dark {
+    /* Color Palette - Dark Mode */
+    --bg-main: #0f172a;
+    --bg-sidebar: #1e293b;
+    --accent: #818cf8; /* Lighter Indigo */
+    --accent-hover: #6366f1;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --card-bg: #1e293b;
+    --border-color: #334155;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+    --color-blocked: #f87171;
+    --color-safe: #34d399;
+}
+
+/* Base Styles */
+body {
+    display: flex; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    min-height: 100vh; background: var(--bg-main); color: var(--text-main); transition: background 0.3s, color 0.3s;
+}
+.sidebar {
+    width: 250px; padding: 20px; background: var(--bg-sidebar); box-shadow: var(--shadow-md); display: flex; flex-direction: column;
+}
+.sidebar h2 { color: var(--accent); margin-top: 0; margin-bottom: 30px; }
+.main-content {
+    flex-grow: 1; padding: 40px;
+}
+header h1 { margin-top: 0; color: var(--text-main); }
+header p { color: var(--text-muted); margin-bottom: 30px; }
+.card {
+    background: var(--card-bg); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);
+}
+.primary-btn {
+    background: var(--accent); color: white; border: none; padding: 12px 20px; border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s;
+    font-weight: 600;
+}
+.primary-btn:hover { background: var(--accent-hover); }
+
+/* Navigation */
+.nav-btn {
+    display: flex; align-items: center; width: 100%; padding: 12px 15px; margin-bottom: 10px; border: none;
+    background: transparent; color: var(--text-muted); text-align: left; font-size: 16px; font-weight: 500;
+    border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s, color 0.2s;
+}
+.nav-btn span { margin-right: 10px; font-size: 1.2em; }
+.nav-btn.active { background: var(--accent); color: white; }
+.nav-btn.active:hover { background: var(--accent-hover); }
+
+/* 다크 모드 토글 버튼 전용 스타일 추가 (nav-btn과 분리) */
+.dark-mode-toggle-btn {
+    display: flex; align-items: center; width: 100%; padding: 12px 15px; margin-bottom: 10px; border: none;
+    background: transparent; color: var(--text-main); text-align: left; font-size: 16px; font-weight: 500;
+    border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s, color 0.2s;
+}
+.dark-mode-toggle-btn:hover { background: var(--border-color); }
+.dark-mode-toggle-btn span { margin-right: 10px; font-size: 1.2em; }
+
+body.dark .dark-mode-toggle-btn { 
+    color: var(--text-main); 
+    background: var(--bg-sidebar); /* 다크모드에서 배경과 구분되도록 */
+}
+body.dark .dark-mode-toggle-btn:hover { 
+    background: var(--border-color); 
+}
+/* ----- */
+
+
+/* Tab Content */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Overview / Recap List */
+.recap-mode-toggle {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.recap-mode-toggle button {
+    border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main); padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;
+}
+.recap-mode-toggle button:hover { background: var(--border-color); }
+.recap-mode-toggle .sort-options button.active {
+    background: var(--accent); color: white; border-color: var(--accent);
+}
+.recap-mode-toggle .sort-options button:not(.active) {
+    background: transparent; border: 1px solid var(--border-color);
+}
+
+.recap-header { margin: 30px 0 10px; }
+.recap-header h3 { color: var(--accent); margin: 0; }
+
+.recap-list { display: flex; flex-direction: column; gap: 15px; }
+.recap-item {
+    background: var(--card-bg); border-radius: var(--radius-md); padding: 15px; box-shadow: var(--shadow-sm);
+    position: relative; overflow: hidden; border: 1px solid var(--border-color);
+}
+.usage-bar {
+    position: absolute; top: 0; left: 0; bottom: 0; background: rgba(99, 102, 241, 0.1); transition: width 0.5s ease;
+    z-index: 1;
+}
+.recap-content {
+    display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2;
+}
+.domain-info { display: flex; align-items: center; gap: 15px; }
+.favicon { width: 24px; height: 24px; background-size: contain; background-repeat: no-repeat; border-radius: 4px; }
+.domain-name { font-weight: 600; color: var(--text-main); }
+.insight { font-size: 0.9em; color: var(--text-muted); }
+.stats-group { display: flex; align-items: center; gap: 20px; }
+.time { font-weight: 700; font-size: 1.1em; }
+.list-block-btn {
+    background: var(--color-blocked); color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: background 0.2s;
+    font-size: 0.9em;
+}
+.list-block-btn:hover { background: #dc2626; }
+.list-block-btn.is-blocked { background: var(--color-safe); }
+.list-block-btn.is-blocked:hover { background: #059669; }
+
+/* Detailed Recap Styles */
+.detailed-analysis { display: none; margin-top: 20px; }
+.detailed-analysis.active { display: block; }
+.date-input {
+    padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); color: var(--text-main); margin-bottom: 20px;
+    font-size: 16px;
+}
+.summary-cards {
+    display: flex; gap: 15px; margin-bottom: 30px;
+}
+.summary-card {
+    flex: 1; padding: 15px; background: var(--card-bg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);
+    font-size: 1.1em; font-weight: 500; color: var(--text-muted);
+}
+.summary-card span { font-weight: 700; color: var(--accent); margin-left: 5px; }
+.change-card span { color: var(--color-blocked); } /* JS에서 안전한 색상으로 덮어씁니다. */
+
+.graph-container {
+    height: 200px; display: flex; align-items: flex-end; justify-content: space-between; gap: 1%;
+    border-bottom: 2px solid var(--border-color); padding-bottom: 5px;
+    position: relative;
+}
+.bar-wrapper {
+    flex-grow: 1; height: 100%; display: flex; align-items: flex-end; position: relative;
+}
+.bar {
+    width: 80%; background: var(--accent); border-radius: 4px 4px 0 0; margin: 0 auto; transition: height 0.5s ease;
+    position: relative;
+}
+.bar.blocked { background: var(--color-blocked); }
+.graph-label {
+    text-align: center; color: var(--text-muted); font-size: 0.9em; margin-top: 10px;
+}
+
+
+/* Blocklist Styles */
+.block-add-panel {
+    display: flex; gap: 10px; align-items: center;
+}
+.block-add-panel input {
+    flex-grow: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main);
+}
+.block-list {
+    list-style: none; padding: 0; margin-top: 20px;
+}
+.block-list li {
+    display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; margin-bottom: 8px;
+    background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);
+}
+.block-list li span { font-weight: 500; }
+.block-list .list-block-btn { background: var(--color-blocked); }
+
+/* Settings Styles */
+.settings-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;
+}
+.setting-card {
+    background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px;
+}
+.setting-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
+}
+.setting-header label { font-weight: 600; color: var(--text-main); }
+.input-value {
+    padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); color: var(--text-main);
+}
+.save-status {
+    margin-left: 15px; font-weight: 600; color: var(--color-safe);
+}
+
+/* Toggle Switch (Unchanged standard CSS) */
+.switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .4s; border-radius: 26px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--accent); }
+input:focus + .slider { box-shadow: 0 0 1px var(--accent); }
+input:checked + .slider:before { transform: translateX(22px); }
+
+/* Schedule Slider */
+.schedule-panel { margin-bottom: 20px; }
+.time-slider-container {
+    padding: 40px; background: var(--card-bg); border-radius: var(--radius-lg); 
+    position: relative;
+    opacity: 1; transition: opacity 0.3s; /* JS에서 제어 */
+}
+.time-display {
+    text-align: center; font-size: 18px; font-weight: 600; color: var(--accent);
+    margin-bottom: 20px; display: flex; justify-content: center; gap: 10px;
+}
+.time-display .separator { color: var(--text-muted); }
+.slider-track-wrapper {
+    position: relative;
+    height: 30px;
+    padding-top: 10px;
+    margin-bottom: 20px;
+}
+.slider-track { background: var(--border-color); height: 10px; border-radius: 10px; position: absolute; top: 10px; left: 0; right: 0; }
+.slider-range { 
+    position: absolute; 
+    top: 10px; 
+    height: 10px; 
+    background: linear-gradient(90deg, var(--accent), #a855f7); 
+    border-radius: 10px; 
+}
+.slider-handle { 
+    position: absolute;
+    top: 15px;
+    width: 26px; height: 26px; border: 4px solid var(--card-bg); 
+    background: var(--accent);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    cursor: grab;
+    transition: box-shadow 0.2s;
+}
+.slider-handle:hover {
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.2);
+}
+body.dark .slider-handle { border: 4px solid var(--bg-main); }

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Friction System | Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>⚡ Friction</h2>
+        <nav>
+            <button class="nav-btn active" data-tab="overview"><span>📊</span> Overview</button>
+            <button class="nav-btn" data-tab="detailed-recap"><span>🔍</span> Detailed Recap</button>
+            <button class="nav-btn" data-tab="blocklist"><span>🚫</span> 차단 관리</button>
+            <button class="nav-btn" data-tab="settings"><span>⚙️</span> 필터 설정</button>
+            <button class="nav-btn" data-tab="schedule"><span>⏰</span> 스케줄</button>
+        </nav>
+        
+        <div style="margin-top: auto;">
+            <button id="darkModeToggle" class="dark-mode-toggle-btn">🌙 다크 모드</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <section id="overview" class="tab-content active">
+            <header>
+                <h1>웹 사용 개요</h1>
+                <p>오늘 가장 많은 시간을 보낸 서비스들을 확인하세요.</p>
+            </header>
+            
+            <div class="card" style="padding: 10px 24px;">
+                <div class="recap-mode-toggle">
+                    <button id="toggleRecapMode">백그라운드 보기</button>
+                    <div class="sort-options">
+                        <button id="sortByTime" class="active">시간 순</button>
+                        <button id="sortByVisits">방문 순</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="recap-header">
+                <h3 id="recapModeTitle">📊 포그라운드(Active) 시간</h3>
+            </div>
+
+            <div class="recap-list" id="recapList">
+                </div>
+        </section>
+        
+        <section id="detailed-recap" class="tab-content">
+            <header>
+                <h1>🔍 상세 리캡</h1>
+                <p>시간대별 및 주간 사용량 추이를 확인하세요.</p>
+            </header>
+
+            <div class="card" style="padding: 10px 24px;">
+                <div class="recap-mode-toggle">
+                    <div class="sort-options">
+                        <button id="toggleDaily" class="active">일간 분석</button>
+                        <button id="toggleWeekly">주간 분석</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detailed-analysis active" id="dailyAnalysis">
+                <input type="date" id="dailyDate" class="date-input">
+                <div class="summary-cards">
+                    <div class="summary-card">총 사용 시간: <span id="dailyTotal">0초</span></div>
+                    <div class="summary-card">차단 시간: <span id="dailyBlocked">0초</span></div>
+                    <div class="summary-card change-card">어제 대비: <span id="dailyChange"></span></div>
+                </div>
+                <div class="graph-container" id="dailyGraph"></div>
+                <div class="graph-label">시간 (0h - 23h)</div>
+            </div>
+
+            <div class="detailed-analysis" id="weeklyAnalysis">
+                 <div class="summary-cards">
+                    <div class="summary-card">총 사용 시간: <span id="weeklyTotal">0초</span></div>
+                    <div class="summary-card">차단 시간: <span id="weeklyBlocked">0초</span></div>
+                    <div class="summary-card change-card">지난주 대비: <span id="weeklyChange"></span></div>
+                </div>
+                <div class="graph-container" id="weeklyGraph"></div>
+                <div class="graph-label">요일 (일 - 토)</div>
+            </div>
+        </section>
+
+        <section id="blocklist" class="tab-content">
+            <header>
+                <h1>🚫 차단 관리</h1>
+                <p>방해되는 웹사이트 도메인을 등록하여 마찰 필터를 적용합니다.</p>
+            </header>
+            
+            <div class="card block-add-panel">
+                <input type="text" id="newBlockUrl" placeholder="차단할 도메인 입력 (예: youtube.com)">
+                <button id="addBlockBtn">차단 추가</button>
+            </div>
+            
+            <ul class="block-list" id="blockedListDisplay">
+                </ul>
+        </section>
+        
+        <section id="settings" class="tab-content">
+            <header>
+                <h1>⚙️ 필터 설정</h1>
+                <p>각 마찰 필터의 강도와 활성화 여부를 조정하세요.</p>
+            </header>
+
+            <div class="settings-grid">
+                </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <button id="saveSettingsBtn" class="primary-btn">설정 저장</button>
+                <span id="saveStatus" class="save-status"></span>
+            </div>
+        </section>
+        
+        <section id="schedule" class="tab-content">
+            <header>
+                <h1>⏰ 필터 스케줄 관리</h1>
+                <p>특정 시간대에만 마찰 필터가 작동하도록 설정하여 업무 효율을 높이세요.</p>
+            </header>
+
+            <div class="card schedule-panel">
+                <label class="switch-label" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>스케줄 기반 필터 활성화</span>
+                    <label class="switch">
+                        <input type="checkbox" id="schedule-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="card time-slider-container" id="time-slider-container">
+                <div class="time-display">
+                    <span id="start-time-display">00:00</span>
+                    <span class="separator">~</span>
+                    <span id="end-time-display">24:00</span>
+                </div>
+                <div class="slider-track-wrapper">
+                    <div class="slider-track"></div>
+                    <div class="slider-range" id="slider-range"></div>
+                    <div class="slider-handle" id="handle-start"></div> 
+                    <div class="slider-handle" id="handle-end"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="dataManager.js" type="module"></script>
+    <script src="config.js" type="module"></script>
+    <script src="dashboard.js" type="module"></script>
+</body>
+</html>
