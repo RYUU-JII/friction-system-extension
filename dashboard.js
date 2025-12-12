@@ -184,11 +184,12 @@ function displayOverview(sortBy = 'time') {
         const timeToDisplay = isBackgroundMode ? item.background : item.active;
         const formattedTime = dataManager.formatTime(timeToDisplay);
         const barWidth = (item[effectiveSortKey] / maxVal) * 100;
+        const blockClass = item.isBlocked ? 'is-blocked' : '';
 
         const recapItem = document.createElement('div');
         recapItem.className = 'recap-item';
         recapItem.innerHTML = `
-            <div class="usage-bar" style="width: ${barWidth}%"></div>
+            <div class="usage-bar ${blockClass}" style="width: ${barWidth}%"></div>
             <div class="recap-content">
                 <div class="domain-info">
                     <div class="favicon" style="background-image: url('https://www.google.com/s2/favicons?domain=${item.domain}&sz=32')"></div>
