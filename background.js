@@ -169,7 +169,7 @@ async function settleTabTime(url, isActive, isNewVisit = false) {
     await loadStatsCache();
     const hostname = getHostname(url);
 
-    if (!hostname || url.startWith('chrome://') || hostname===chrome.runtime.id) return;
+    if (!hostname || url.startsWith('chrome://') || hostname===chrome.runtime.id) return;
     const now = Date.now();
     let isChanged = await calculateTabTime(hostname, now, isActive);
     if (isNewVisit) {
