@@ -295,6 +295,16 @@ function displaySettings() {
         if (!SETTING_METADATA[key]) return;
         const meta = SETTING_METADATA[key];
 
+        let inputValue = setting.value || '';
+        // 'text' 타입 (CSS 속성)이고, 값이 문자열인 경우에만 처리
+        if (meta.type !== 'number' && typeof inputValue === 'string') {
+            // 정규식을 사용하여 숫자 및 소수점만 추출 (예: "1.5px" -> "1.5")
+            const match = inputValue.match(/^-?(\d*\.)?\d+/);
+            if (match) {
+                inputValue = match[0];
+            }
+        }
+        
         const card = document.createElement('div');
         card.className = 'setting-card';
         card.innerHTML = `
@@ -307,9 +317,13 @@ function displaySettings() {
             </div>
             <div style="display: flex; align-items: center;">
                 <input class="input-value" type="${meta.type === 'number' ? 'number' : 'text'}" 
-                       value="${setting.value || ''}" placeholder="${meta.placeholder || ''}"
-                       ${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}
-                       style="flex-grow: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); color: var(--text-main);">
+                    
+                    // 🔴 2. 추출된 숫자 값 사용
+                    value="${inputValue}" 
+                    
+                    placeholder="${meta.placeholder || ''}"
+                    ${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}
+                    style="flex-grow: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); color: var(--text-main);">
                 <span style="margin-left: 10px; color: var(--text-muted);">${meta.unit || ''}</span>
             </div>
         `;
@@ -487,16 +501,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // 6. Settings 저장
     UI.saveSettingsBtn.addEventListener('click', () => {
         const newSettings = {};
-        document.querySelectorAll('.setting-card').forEach(card => {
-            const toggle = card.querySelector('.toggle-active');
-            const key = toggle.dataset.key;
-            const input = card.querySelector('.input-value');
-            
-            newSettings[key] = { 
-                isActive: toggle.checked,
-                value: (key === 'clickDelay' || key === 'scrollFriction') ? parseInt(input.value, 10) : input.value
-            };
-        });
+    document.querySelectorAll('.setting-card').forEach(card => {
+        const toggle = card.querySelector('.toggle-active');
+        const key = toggle.dataset.key;
+        const input = card.querySelector('.input-value');
+        
+        // 1. 저장할 값의 기본값은 입력된 값으로 설정
+        let valueToSave = input.value;
+
+        if (key === 'clickDelay' || key === 'scrollFriction') {
+            // 2. 시간(ms) 설정: 정수형으로 파싱 (0이 입력될 경우 0 저장)
+            valueToSave = parseInt(input.value, 10) || 0;
+        } else {
+            // 3. CSS 설정 (px, s, %, em): SETTING_METADATA에서 단위를 가져와 재결합
+            const unit = SETTING_METADATA[key]?.unit || '';
+            valueToSave = input.value + unit;
+        }
+
+        newSettings[key] = { 
+            isActive: toggle.checked,
+            value: valueToSave // 최종적으로 단위가 붙거나 정수형으로 변환된 값
+        };
+    });
 
         chrome.storage.local.set({ filterSettings: newSettings }, () => {
             UI.saveStatus.textContent = '✅ 저장 완료!';
