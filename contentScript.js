@@ -40,13 +40,17 @@ const state = {
 // ===========================================================
 
 const SELECTORS = {
-    // VISUAL_TARGETS는 다양한 시각적 요소를 포함하도록 확장되었습니다.
-    VISUAL_TARGETS: ':is(.feed-item, .recommendation-tile, .suggested-videos, .related-posts, .thumbnail-image, .post-preview, #comments, .comment-list, .discussion-area, .ad-container, .promotion-box, [data-ad-type], [id*="ad"], [class*="ad"], .stickyunit, .search-result-item, .snippet-text, a, button, a img, video, ytd-reel-video-renderer, [role="article"], p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th)',
+    // VISUAL_TARGETS: "틀(컨테이너)"이 아닌 "콘텐츠(미디어/이미지)"에만 적용해 중첩 필터(누적 blur/grayscale)를 방지합니다.
+    // - 컨테이너(예: article, p, li, a 등)에 filter를 걸면 자식까지 합성되어 단계적으로 옅어지는 현상이 생길 수 있습니다.
+    // - X(트위터) 모달/포토 뷰어도 컨테이너 filter에 의해 "열리지만 안 보이는" 문제가 발생할 수 있어, 타겟을 leaf로 제한합니다.
+    VISUAL_TARGETS: ':is(img, picture, video, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
     
     // INTERACTIVE_TARGETS는 네비게이션 및 인터랙션 요소를 포괄하도록 확장되었습니다.
     INTERACTIVE_TARGETS: ':is(a, button, article, [onclick], input[type="submit"], input[type="image"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="article"], [role="menuitem"], [role="option"], [role="tab"], [class*="link"], [class*="button"], [class*="btn"], figure):not(.stickyunit)',
     
-    TEXT_TARGETS: ':is(p, span:not([role]), li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a)'
+    TEXT_LAYOUT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a)',
+    TEXT_VISUAL_TARGETS: ':is(span:not([role]), a:not(:has(img, video, canvas, svg)), p:not(:has(img, video, canvas, svg)), li:not(:has(img, video, canvas, svg)), h1:not(:has(img, video, canvas, svg)), h2:not(:has(img, video, canvas, svg)), h3:not(:has(img, video, canvas, svg)), h4:not(:has(img, video, canvas, svg)), h5:not(:has(img, video, canvas, svg)), h6:not(:has(img, video, canvas, svg)), blockquote:not(:has(img, video, canvas, svg)))',
+    TEXT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a)'
 };
 
 // ===========================================================
@@ -67,7 +71,14 @@ const VisualManager = {
     update(filters) {
         const blur = filters.blur;
         const desat = filters.desaturation;
-        const isActive = (blur && blur.isActive) || (desat && desat.isActive);
+        const mediaBrightness = filters.mediaBrightness;
+        const mediaOpacity = filters.mediaOpacity;
+
+        const isActive =
+            (blur && blur.isActive) ||
+            (desat && desat.isActive) ||
+            (mediaBrightness && mediaBrightness.isActive) ||
+            (mediaOpacity && mediaOpacity.isActive);
 
         if (!isActive) {
             this.remove();
@@ -77,8 +88,9 @@ const VisualManager = {
         const filterValues = [];
         if (blur && blur.isActive) filterValues.push(`blur(${blur.value})`);
         if (desat && desat.isActive) filterValues.push(`grayscale(${desat.value})`);
+        if (mediaBrightness && mediaBrightness.isActive) filterValues.push(`brightness(${mediaBrightness.value})`);
 
-        const combinedFilter = filterValues.join(' ');
+        const combinedFilter = filterValues.length > 0 ? filterValues.join(' ') : 'none';
         
         let style = document.getElementById(STYLES.VISUAL.ID);
         if (!style) {
@@ -89,18 +101,31 @@ const VisualManager = {
 
         // ✨ 핵심 수정: html 태그의 속성을 확인하고, will-change를 제거했습니다.
         // ✨ 핵심 추가: :has(:hover)를 통해 이중 필터링을 방지합니다.
+        const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
+        const opacityRule = mediaOpacity && mediaOpacity.isActive ? `opacity: ${mediaOpacity.value} !important;` : '';
+
         style.textContent = `
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS} {
                 filter: ${combinedFilter} !important;
-                transition: filter 0.1s ease;
+                ${opacityRule}
+                transition: filter 0.1s ease, opacity 0.1s ease;
                 /* will-change: filter; 제거 */
             }
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:hover {
                 filter: none !important;
+                opacity: 1 !important;
             }
             /* 이중 필터 버그 수정: 자식 요소가 호버되면 부모 필터도 해제 */
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:has(:hover) {
                 filter: none !important;
+                opacity: 1 !important;
+            }
+
+            /* 오버레이/모달은 시각 필터에서 제외: X 사진 팝업이 "열리지만 안 보이는" 현상 방지 */
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt},
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} * {
+                filter: none !important;
+                opacity: 1 !important;
             }
         `;
         setRootAttribute(STYLES.VISUAL.ATTR, 'active');
@@ -138,6 +163,68 @@ const DelayManager = {
 };
 
 const TextManager = {
+    update(filters) {
+        const spacing = filters.letterSpacing;
+        const textOpacity = filters.textOpacity;
+        const textBlur = filters.textBlur;
+
+        const isActive =
+            (spacing && spacing.isActive) ||
+            (textOpacity && textOpacity.isActive) ||
+            (textBlur && textBlur.isActive);
+
+        if (!isActive) {
+            this.remove();
+            return;
+        }
+
+        let style = document.getElementById(STYLES.SPACING.ID);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = STYLES.SPACING.ID;
+            document.head.appendChild(style);
+        }
+
+        const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
+        const spacingValue = spacing && spacing.isActive ? spacing.value : 'normal';
+        const opacityValue = textOpacity && textOpacity.isActive ? textOpacity.value : null;
+        const blurValue = textBlur && textBlur.isActive ? textBlur.value : null;
+
+        const visualTextRules = (opacityValue || blurValue)
+            ? `
+                ${SELECTORS.TEXT_VISUAL_TARGETS} {
+                    ${opacityValue ? `opacity: ${opacityValue} !important;` : ''}
+                    ${blurValue ? `filter: blur(${blurValue}) !important;` : ''}
+                    transition: opacity 0.15s ease, filter 0.15s ease;
+                }
+            `
+            : '';
+
+        style.textContent = `
+            ${SELECTORS.TEXT_LAYOUT_TARGETS} {
+                letter-spacing: ${spacingValue} !important;
+                transition: letter-spacing 0.3s ease;
+            }
+            ${visualTextRules}
+
+            /* 오버레이/모달은 텍스트 시각 필터에서도 제외 */
+            ${overlayExempt},
+            ${overlayExempt} * {
+                opacity: 1 !important;
+                filter: none !important;
+                letter-spacing: normal !important;
+            }
+        `;
+
+        setRootAttribute(STYLES.SPACING.ATTR, 'active');
+    },
+
+    remove() {
+        const style = document.getElementById(STYLES.SPACING.ID);
+        if (style) style.remove();
+        setRootAttribute(STYLES.SPACING.ATTR, 'none');
+    },
+
     applySpacing(value) {
         let style = document.getElementById(STYLES.SPACING.ID);
         if (!style) {
@@ -172,8 +259,24 @@ const InteractionManager = {
     
         if (!el) return;
 
+        // ⭐️ [이전 수정]: 클릭된 실제 요소가 <img> 태그라면 즉시 우회
+        if (e.target.tagName === 'IMG') {
+             return;
+        }
+
+        // ⭐️ [추가 수정 로직: X 사진 링크 구조 대응]
+        // 1. 클릭된 요소의 가장 가까운 부모 중 A 태그를 찾는다.
+        const parentAnchor = e.target.closest('a');
+        
+        // 2. 만약 A 태그가 존재하고, 그 A 태그 내부에 IMG 태그가 포함되어 있다면 (사진 링크로 간주)
+        if (parentAnchor && parentAnchor.querySelector('img')) {
+            // 이 클릭은 X의 사진 팝업을 위한 것이므로 지연을 적용하지 않고 즉시 종료(우회)
+            return;
+        }
+
         // 1. 이전 타이머 취소
         const existingTimerId = el.dataset.frictionTimerId;
+        
         if (existingTimerId) {
             clearTimeout(Number(existingTimerId));
             delete el.dataset.frictionTimerId;
@@ -194,20 +297,19 @@ const InteractionManager = {
             el.tagName === 'A' || 
             el.tagName === 'BUTTON' || 
             el.tagName === 'ARTICLE' || 
-            el.tagName === 'FIGURE' || // figure 추가
+            el.tagName === 'FIGURE' ||
             el.hasAttribute('href') || 
             el.hasAttribute('onclick') ||
             el.matches('input[type="submit"]') ||
-            el.matches('input[type="image"]') || // input type=image 추가
+            el.matches('input[type="image"]') ||
             
             // ARIA Role 검증 강화
             el.getAttribute('role') === 'link' ||
             el.getAttribute('role') === 'button' ||
             el.getAttribute('role') === 'article' ||
-            el.getAttribute('role') === 'menuitem' || // 메뉴 아이템 추가
-            el.getAttribute('role') === 'option' ||   // 선택지 아이템 추가
-            el.getAttribute('role') === 'tab' ||      // 탭 아이템 추가
-            
+            el.getAttribute('role') === 'menuitem' ||
+            el.getAttribute('role') === 'option' ||
+            el.getAttribute('role') === 'tab' ||
             // 상태 변경 요소 포함
             el.getAttribute('role') === 'checkbox' ||
             el.getAttribute('role') === 'radio' ||
@@ -343,14 +445,14 @@ const InteractionManager = {
 // ===========================================================
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (!request.isBlocked) {
-        VisualManager.remove();
-        DelayManager.remove();
-        TextManager.removeSpacing();
-        InteractionManager.removeClickDelay();
-        InteractionManager.removeScroll();
-        return;
-    }
+      if (!request.isBlocked) {
+          VisualManager.remove();
+          DelayManager.remove();
+          TextManager.remove();
+          InteractionManager.removeClickDelay();
+          InteractionManager.removeScroll();
+          return;
+      }
 
     const { filters } = request;
     
@@ -365,9 +467,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (filters.scrollFriction?.isActive) InteractionManager.applyScroll(filters.scrollFriction.value);
     else InteractionManager.removeScroll();
 
-    if (filters.letterSpacing?.isActive) TextManager.applySpacing(filters.letterSpacing.value);
-    else TextManager.removeSpacing();
-});
+      TextManager.update(filters);
+  });
 
 // ===========================================================
 // 5. Helpers
@@ -403,27 +504,27 @@ function checkTimeCondition(schedule) {
 chrome.storage.local.get({
     blockedUrls: [], 
     schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
-    filterSettings: {
-        blur: { isActive: false, value: '1.5px' },
-        delay: { isActive: false, value: '0.5s' },
-        desaturation: { isActive: false, value: '50%' },
-        letterSpacing: { isActive: false, value: '0.1em' }
-    } 
-}, (items) => {
+     filterSettings: {
+         blur: { isActive: false, value: '1.5px' },
+         delay: { isActive: false, value: '0.5s' },
+         desaturation: { isActive: false, value: '50%' },
+         letterSpacing: { isActive: false, value: '0.1em' },
+         textOpacity: { isActive: false, value: '0.9' },
+         textBlur: { isActive: false, value: '0.3px' },
+         mediaOpacity: { isActive: false, value: '0.9' },
+         mediaBrightness: { isActive: false, value: '90%' }
+     } 
+ }, (items) => {
     
     const url = window.location.href;
     const hostname = getHostname(url);
     const isBlocked = hostname && items.blockedUrls.includes(hostname);
     const isTimeActive = checkTimeCondition(items.schedule); 
 
-    if (isBlocked && isTimeActive) {
-        const filters = items.filterSettings;
-        if (filters.letterSpacing?.isActive) {
-            TextManager.applySpacing(filters.letterSpacing.value); 
-        }
-        if (filters.blur?.isActive || filters.desaturation?.isActive || filters.delay?.isActive) {
-             VisualManager.update(filters);
-             if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
-        }
-    }
-});
+     if (isBlocked && isTimeActive) {
+         const filters = items.filterSettings;
+         TextManager.update(filters);
+         if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
+         VisualManager.update(filters);
+     }
+ });
