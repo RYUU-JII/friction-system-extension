@@ -37,6 +37,13 @@ function minToTime(minutes) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function formatBlockedInsight(blockedMs, totalMs) {
+    if (!totalMs || totalMs <= 0) return '기록된 사용 시간이 없어요.';
+    const pct = Math.round((blockedMs / totalMs) * 100);
+    if (pct <= 0) return '차단된 사이트 사용이 없어요.';
+    return `차단된 사이트에서 전체의 ${pct}%를 사용했어요.`;
+}
+
 // ===========================================================
 // 3. 핵심 데이터 로직 및 렌더링 컨트롤러
 // ===========================================================
@@ -65,10 +72,12 @@ function initDOMReferences() {
     UI.dailyBlocked = document.getElementById('dailyBlocked');
     UI.dailyChange = document.getElementById('dailyChange');
     UI.dailyGraph = document.getElementById('dailyGraph');
+    UI.dailyInsight = document.getElementById('dailyInsight');
     UI.weeklyTotal = document.getElementById('weeklyTotal');
     UI.weeklyBlocked = document.getElementById('weeklyBlocked');
     UI.weeklyChange = document.getElementById('weeklyChange');
     UI.weeklyGraph = document.getElementById('weeklyGraph');
+    UI.weeklyInsight = document.getElementById('weeklyInsight');
 
     // Blocklist 탭
     UI.blockedListDisplay = document.getElementById('blockedListDisplay');
@@ -240,19 +249,27 @@ function renderDailyGraph(dateStr) {
     UI.dailyBlocked.textContent = dataManager.formatTime(blocked);
     UI.dailyChange.textContent = change.startsWith('-') ? change : `+${change}`;
     UI.dailyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
+    if (UI.dailyInsight) UI.dailyInsight.textContent = formatBlockedInsight(blocked, total);
 
     UI.dailyGraph.innerHTML = '';
     const maxHour = Math.max(...hourly, 1);
 
     hourly.forEach((time, h) => {
         const height = (time / maxHour) * 100;
+        const blockedTime = hourlyBlocked[h] || 0;
+        const safeTime = Math.max(0, time - blockedTime);
+        const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
+        const safePct = time > 0 ? (safeTime / time) * 100 : 0;
+        const tooltip = `${h}시\n총: ${dataManager.formatTime(time)}\n차단: ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
         barWrapper.innerHTML = `
-            <div class="bar" style="height: ${height}%">
-                <div class="bar blocked" style="height: ${time > 0 ? (hourlyBlocked[h] / time) * 100 : 0}%; position: absolute; bottom: 0; width: 100%;"></div>
+            <div class="bar-stack" style="height: ${height}%;" title="${tooltip}">
+                <div class="bar-segment bar-safe" style="height: ${safePct}%;"></div>
+                <div class="bar-segment bar-blocked" style="height: ${blockedPct}%;"></div>
             </div>
-            ${h % 3 === 0 ? `<div style="position: absolute; bottom: -20px; width: 100%; text-align: center; font-size: 0.8rem; color: var(--text-muted);">${h}</div>` : ''}
+            ${h % 3 === 0 ? `<div class="bar-label">${h}</div>` : ''}
         `;
         UI.dailyGraph.appendChild(barWrapper);
     });
@@ -265,6 +282,7 @@ function renderWeeklyGraph() {
     UI.weeklyBlocked.textContent = dataManager.formatTime(blocked);
     UI.weeklyChange.textContent = change.startsWith('-') ? change : `+${change}`;
     UI.weeklyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
+    if (UI.weeklyInsight) UI.weeklyInsight.textContent = formatBlockedInsight(blocked, total);
 
     UI.weeklyGraph.innerHTML = '';
     const maxDay = Math.max(...weekdayData, 1);
@@ -272,14 +290,21 @@ function renderWeeklyGraph() {
 
     weekdayData.forEach((time, idx) => {
         const height = (time / maxDay) * 100;
+        const blockedTime = weekdayBlocked[idx] || 0;
+        const safeTime = Math.max(0, time - blockedTime);
+        const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
+        const safePct = time > 0 ? (safeTime / time) * 100 : 0;
+        const tooltip = `${days[idx]}\n총: ${dataManager.formatTime(time)}\n차단: ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
         barWrapper.style.width = '14%';
         barWrapper.innerHTML = `
-            <div class="bar" style="height: ${height}%">
-                <div class="bar blocked" style="height: ${time > 0 ? (weekdayBlocked[idx] / time) * 100 : 0}%; position: absolute; bottom: 0; width: 100%;"></div>
+            <div class="bar-stack" style="height: ${height}%;" title="${tooltip}">
+                <div class="bar-segment bar-safe" style="height: ${safePct}%;"></div>
+                <div class="bar-segment bar-blocked" style="height: ${blockedPct}%;"></div>
             </div>
-            <div style="position: absolute; bottom: -20px; width: 100%; text-align: center; font-weight: 500; color: var(--text-muted);">${days[idx]}</div>
+            <div class="bar-label">${days[idx]}</div>
         `;
         UI.weeklyGraph.appendChild(barWrapper);
     });
