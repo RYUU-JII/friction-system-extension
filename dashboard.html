@@ -16,13 +16,13 @@
     </div>
 
     <div class="sidebar">
-      <h2>✨Friction</h2>
+      <h2>Friction</h2>
       <nav>
-        <button class="nav-btn active" data-tab="overview"><span>📊</span> Overview</button>
-        <button class="nav-btn" data-tab="detailed-recap"><span>📅</span> Detailed Recap</button>
-        <button class="nav-btn" data-tab="blocklist"><span>🚫</span> 차단 관리</button>
-        <button class="nav-btn" data-tab="settings"><span>⚙️</span> 필터 설정</button>
-        <button class="nav-btn" data-tab="schedule"><span>⏰</span> 스케줄</button>
+        <button class="nav-btn active" data-tab="overview"><span>&#128202;</span> Overview</button>
+        <button class="nav-btn" data-tab="detailed-recap"><span>&#128197;</span> Detailed Recap</button>
+        <button class="nav-btn" data-tab="blocklist"><span>&#128683;</span> 차단 관리</button>
+        <button class="nav-btn" data-tab="settings"><span>&#9881;</span> 필터 설정</button>
+        <button class="nav-btn" data-tab="schedule"><span>&#9200;</span> 스케줄</button>
       </nav>
     </div>
 
@@ -30,7 +30,7 @@
       <section id="overview" class="tab-content active">
         <header>
           <h1>사용 개요</h1>
-          <p>오늘 가장 많은 시간을 보낸 웹사이트를 확인해보세요.</p>
+          <p>오늘 가장 많은 시간을 보낸 사이트를 확인하고, 필요하면 차단 목록에 추가해 보세요.</p>
         </header>
 
         <div class="card" style="padding: 10px 24px">
@@ -44,7 +44,7 @@
         </div>
 
         <div class="recap-header">
-          <h3 id="recapModeTitle">📊 포그라운드(Active) 시간</h3>
+          <h3 id="recapModeTitle">포그라운드(Active) 시간</h3>
         </div>
 
         <div class="recap-list" id="recapList"></div>
@@ -52,8 +52,8 @@
 
       <section id="detailed-recap" class="tab-content">
         <header>
-          <h1>📅 상세 리캡</h1>
-          <p>일간/주간 사용 시간 추이를 확인해보세요.</p>
+          <h1>상세 리캡</h1>
+          <p>“차단된 사이트에서 얼마나 시간을 쓰는지”를 시간대/요일로 확인해 보세요.</p>
         </header>
 
         <div class="card" style="padding: 10px 24px">
@@ -65,32 +65,46 @@
           </div>
         </div>
 
-            <div class="detailed-analysis active" id="dailyAnalysis">
-                <input type="date" id="dailyDate" class="date-input">
-                <div class="summary-cards">
-                    <div class="summary-card">총 사용 시간: <span id="dailyTotal">0초</span></div>
-                    <div class="summary-card">차단 시간: <span id="dailyBlocked">0초</span></div>
-                    <div class="summary-card change-card">어제 대비: <span id="dailyChange"></span></div>
-                </div>
-                <div class="graph-container" id="dailyGraph"></div>
-                <div class="graph-label">시간 (0h - 23h)</div>
+        <div class="detailed-analysis active" id="dailyAnalysis">
+          <input type="date" id="dailyDate" class="date-input" />
+          <div class="summary-cards">
+            <div class="summary-card">총 사용 시간: <span id="dailyTotal">0초</span></div>
+            <div class="summary-card">차단 시간: <span id="dailyBlocked">0초</span></div>
+            <div class="summary-card change-card">어제 대비: <span id="dailyChange"></span></div>
+          </div>
+          <div class="chart-header">
+            <div class="chart-legend" aria-label="그래프 범례">
+              <span class="legend-item"><span class="legend-swatch swatch-total"></span>사용 시간</span>
+              <span class="legend-item"><span class="legend-swatch swatch-blocked"></span>차단 사이트 시간</span>
             </div>
+            <div class="chart-insight" id="dailyInsight"></div>
+          </div>
+          <div class="graph-container" id="dailyGraph"></div>
+          <div class="graph-label">시간 (0h - 23h)</div>
+        </div>
 
-            <div class="detailed-analysis" id="weeklyAnalysis">
-                 <div class="summary-cards">
-                    <div class="summary-card">총 사용 시간: <span id="weeklyTotal">0초</span></div>
-                    <div class="summary-card">차단 시간: <span id="weeklyBlocked">0초</span></div>
-                    <div class="summary-card change-card">지난주 대비: <span id="weeklyChange"></span></div>
-                </div>
-                <div class="graph-container" id="weeklyGraph"></div>
-                <div class="graph-label">요일 (일 - 토)</div>
+        <div class="detailed-analysis" id="weeklyAnalysis">
+          <div class="summary-cards">
+            <div class="summary-card">총 사용 시간: <span id="weeklyTotal">0초</span></div>
+            <div class="summary-card">차단 시간: <span id="weeklyBlocked">0초</span></div>
+            <div class="summary-card change-card">지난주 대비: <span id="weeklyChange"></span></div>
+          </div>
+          <div class="chart-header">
+            <div class="chart-legend" aria-label="그래프 범례">
+              <span class="legend-item"><span class="legend-swatch swatch-total"></span>사용 시간</span>
+              <span class="legend-item"><span class="legend-swatch swatch-blocked"></span>차단 사이트 시간</span>
             </div>
-        </section>
+            <div class="chart-insight" id="weeklyInsight"></div>
+          </div>
+          <div class="graph-container" id="weeklyGraph"></div>
+          <div class="graph-label">요일 (일 - 토)</div>
+        </div>
+      </section>
 
       <section id="blocklist" class="tab-content">
         <header>
-          <h1>🚫 차단 관리</h1>
-          <p>방해되는 사이트의 도메인을 등록해 마찰 필터를 적용하세요.</p>
+          <h1>차단 관리</h1>
+          <p>방해되는 사이트의 도메인을 등록하면 마찰 필터가 적용돼요.</p>
         </header>
 
         <div class="card block-add-panel">
@@ -103,7 +117,7 @@
 
       <section id="settings" class="tab-content">
         <header>
-          <h1>⚙️ 필터 설정</h1>
+          <h1>필터 설정</h1>
           <p>각 마찰 필터의 강도를 조절하세요.</p>
         </header>
 
@@ -117,7 +131,7 @@
 
       <section id="schedule" class="tab-content">
         <header>
-          <h1>⏰ 필터 스케줄</h1>
+          <h1>필터 스케줄</h1>
           <p>특정 시간대에만 마찰 필터가 동작하도록 설정할 수 있어요.</p>
         </header>
 
