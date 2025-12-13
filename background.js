@@ -314,12 +314,25 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // 메시지 수신
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // IMPORTANT: Only return true when we will actually call sendResponse asynchronously.
+    // Otherwise, sendMessage(Promise) can reject with "message channel closed" errors.
+    if (!request || typeof request.action !== 'string') return false;
+    const knownActions = new Set([
+        "SETTINGS_UPDATED",
+        "SCHEDULE_UPDATED",
+        "DEBUG_GET_CACHE",
+        "DEBUG_FORCE_SAVE",
+        "DEBUG_TRACK_NOW",
+    ]);
+    if (!knownActions.has(request.action)) return false;
     if (request.action === "SETTINGS_UPDATED" || request.action === "SCHEDULE_UPDATED") {
         // async 함수를 즉시 실행
         (async () => {
             await broadcastSettingsUpdate();
             await checkScheduleStatus();
-        })();
+        })().catch((e) => console.error("Error handling settings/schedule update:", e));
+        sendResponse({ success: true });
+        return false;
     }
     
     // ✨ 디버깅용 메시지 핸들러
@@ -329,19 +342,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             loaded: cacheLoaded,
             lastActiveTab: lastActiveTabId 
         });
-        return true;
+        return false;
     }
     
     if (request.action === "DEBUG_FORCE_SAVE") {
         saveStatsCache().then(() => {
             sendResponse({ success: true, message: "저장 완료" });
+        }).catch((e) => {
+            console.error("DEBUG_FORCE_SAVE failed:", e);
+            sendResponse({ success: false });
         });
         return true;
     }
-    
+
     if (request.action === "DEBUG_TRACK_NOW") {
         trackAllTabsBatch().then(() => {
             sendResponse({ success: true, message: "추적 완료", cache: statsCache });
+        }).catch((e) => {
+            console.error("DEBUG_TRACK_NOW failed:", e);
+            sendResponse({ success: false });
         });
         return true;
     }

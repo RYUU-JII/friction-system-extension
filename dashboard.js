@@ -37,6 +37,98 @@ function minToTime(minutes) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function formatBlockedInsight(blockedMs, totalMs) {
+    if (!totalMs || totalMs <= 0) return '기록된 사용 시간이 없어요.';
+    const pct = Math.round((blockedMs / totalMs) * 100);
+    if (pct <= 0) return '차단된 사이트 사용이 없어요.';
+    return `차단된 사이트에서 전체의 ${pct}%를 사용했어요.`;
+}
+
+function findPeakBlockedRatio(totalSeries, blockedSeries, labels, minTotalMs = 60_000) {
+    let bestIdx = null;
+    let bestPct = 0;
+
+    for (let i = 0; i < totalSeries.length; i++) {
+        const total = totalSeries[i] || 0;
+        const blocked = blockedSeries[i] || 0;
+        if (total < minTotalMs || blocked <= 0) continue;
+
+        const pct = (blocked / total) * 100;
+        if (pct > bestPct) {
+            bestPct = pct;
+            bestIdx = i;
+        }
+    }
+
+    if (bestIdx === null) return null;
+    return { label: labels[bestIdx], pct: Math.round(bestPct) };
+}
+
+function ensureChartTooltip() {
+    let el = document.getElementById('chartTooltip');
+    if (el) return el;
+
+    el = document.createElement('div');
+    el.id = 'chartTooltip';
+    el.className = 'chart-tooltip';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    document.body.appendChild(el);
+    return el;
+}
+
+function positionTooltip(el, clientX, clientY) {
+    const offset = 12;
+    const maxWidth = 280;
+    el.style.maxWidth = `${maxWidth}px`;
+
+    el.style.left = `0px`;
+    el.style.top = `0px`;
+    el.classList.add('is-visible');
+
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = clientX + offset;
+    let top = clientY + offset;
+
+    if (left + rect.width > vw - 8) left = clientX - rect.width - offset;
+    if (top + rect.height > vh - 8) top = clientY - rect.height - offset;
+
+    left = Math.max(8, Math.min(vw - rect.width - 8, left));
+    top = Math.max(8, Math.min(vh - rect.height - 8, top));
+
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+}
+
+function hideTooltip(el) {
+    el.classList.remove('is-visible');
+}
+
+function bindChartTooltip(container) {
+    if (!container) return;
+    const tooltipEl = ensureChartTooltip();
+
+    container.addEventListener('mousemove', (e) => {
+        const bar = e.target.closest('.bar-stack');
+        if (!bar || !container.contains(bar)) {
+            hideTooltip(tooltipEl);
+            return;
+        }
+        const text = bar.dataset.tooltip || '';
+        if (!text) {
+            hideTooltip(tooltipEl);
+            return;
+        }
+        tooltipEl.textContent = text;
+        positionTooltip(tooltipEl, e.clientX, e.clientY);
+    });
+
+    container.addEventListener('mouseleave', () => hideTooltip(tooltipEl));
+}
+
 // ===========================================================
 // 3. 핵심 데이터 로직 및 렌더링 컨트롤러
 // ===========================================================
@@ -65,10 +157,12 @@ function initDOMReferences() {
     UI.dailyBlocked = document.getElementById('dailyBlocked');
     UI.dailyChange = document.getElementById('dailyChange');
     UI.dailyGraph = document.getElementById('dailyGraph');
+    UI.dailyInsight = document.getElementById('dailyInsight');
     UI.weeklyTotal = document.getElementById('weeklyTotal');
     UI.weeklyBlocked = document.getElementById('weeklyBlocked');
     UI.weeklyChange = document.getElementById('weeklyChange');
     UI.weeklyGraph = document.getElementById('weeklyGraph');
+    UI.weeklyInsight = document.getElementById('weeklyInsight');
 
     // Blocklist 탭
     UI.blockedListDisplay = document.getElementById('blockedListDisplay');
@@ -246,17 +340,48 @@ function renderDailyGraph(dateStr) {
 
     UI.dailyGraph.innerHTML = '';
     const maxHour = Math.max(...hourly, 1);
+    const hourLabels = Array.from({ length: 24 }, (_, h) => `${h}시`);
+    const peak = findPeakBlockedRatio(hourly, hourlyBlocked, hourLabels);
+    if (UI.dailyInsight) {
+        const base = formatBlockedInsight(blocked, total);
+        UI.dailyInsight.textContent = peak ? `${base} · 최고 ${peak.label} (${peak.pct}%)` : base;
+    }
 
     hourly.forEach((time, h) => {
         const height = (time / maxHour) * 100;
+        const blockedTime = hourlyBlocked[h] || 0;
+        const safeTime = Math.max(0, time - blockedTime);
+        const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
+        const safePct = time > 0 ? (safeTime / time) * 100 : 0;
+        const tooltip = `${h}시\n총 ${dataManager.formatTime(time)}\n차단 ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
-        barWrapper.innerHTML = `
-            <div class="bar" style="height: ${height}%">
-                <div class="bar blocked" style="height: ${time > 0 ? (hourlyBlocked[h] / time) * 100 : 0}%; position: absolute; bottom: 0; width: 100%;"></div>
-            </div>
-            ${h % 3 === 0 ? `<div style="position: absolute; bottom: -20px; width: 100%; text-align: center; font-size: 0.8rem; color: var(--text-muted);">${h}</div>` : ''}
-        `;
+
+        const barStack = document.createElement('div');
+        barStack.className = 'bar-stack';
+        barStack.style.height = `${height}%`;
+        barStack.dataset.tooltip = tooltip;
+
+        const safeSeg = document.createElement('div');
+        safeSeg.className = 'bar-segment bar-safe';
+        safeSeg.style.height = `${safePct}%`;
+
+        const blockedSeg = document.createElement('div');
+        blockedSeg.className = 'bar-segment bar-blocked';
+        blockedSeg.style.height = `${blockedPct}%`;
+
+        barStack.appendChild(blockedSeg);
+        barStack.appendChild(safeSeg);
+        barWrapper.appendChild(barStack);
+
+        if (h % 3 === 0) {
+            const label = document.createElement('div');
+            label.className = 'bar-label';
+            label.textContent = String(h);
+            barWrapper.appendChild(label);
+        }
+
         UI.dailyGraph.appendChild(barWrapper);
     });
 }
@@ -272,18 +397,46 @@ function renderWeeklyGraph() {
     UI.weeklyGraph.innerHTML = '';
     const maxDay = Math.max(...weekdayData, 1);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const peak = findPeakBlockedRatio(weekdayData, weekdayBlocked, days);
+    if (UI.weeklyInsight) {
+        const base = formatBlockedInsight(blocked, total);
+        UI.weeklyInsight.textContent = peak ? `${base} · 최고 ${peak.label} (${peak.pct}%)` : base;
+    }
 
     weekdayData.forEach((time, idx) => {
         const height = (time / maxDay) * 100;
+        const blockedTime = weekdayBlocked[idx] || 0;
+        const safeTime = Math.max(0, time - blockedTime);
+        const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
+        const safePct = time > 0 ? (safeTime / time) * 100 : 0;
+        const tooltip = `${days[idx]}\n총 ${dataManager.formatTime(time)}\n차단 ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
         barWrapper.style.width = '14%';
-        barWrapper.innerHTML = `
-            <div class="bar" style="height: ${height}%">
-                <div class="bar blocked" style="height: ${time > 0 ? (weekdayBlocked[idx] / time) * 100 : 0}%; position: absolute; bottom: 0; width: 100%;"></div>
-            </div>
-            <div style="position: absolute; bottom: -20px; width: 100%; text-align: center; font-weight: 500; color: var(--text-muted);">${days[idx]}</div>
-        `;
+
+        const barStack = document.createElement('div');
+        barStack.className = 'bar-stack';
+        barStack.style.height = `${height}%`;
+        barStack.dataset.tooltip = tooltip;
+
+        const safeSeg = document.createElement('div');
+        safeSeg.className = 'bar-segment bar-safe';
+        safeSeg.style.height = `${safePct}%`;
+
+        const blockedSeg = document.createElement('div');
+        blockedSeg.className = 'bar-segment bar-blocked';
+        blockedSeg.style.height = `${blockedPct}%`;
+
+        barStack.appendChild(blockedSeg);
+        barStack.appendChild(safeSeg);
+        barWrapper.appendChild(barStack);
+
+        const label = document.createElement('div');
+        label.className = 'bar-label';
+        label.textContent = days[idx];
+        barWrapper.appendChild(label);
+
         UI.weeklyGraph.appendChild(barWrapper);
     });
 }
@@ -427,6 +580,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadDataAndRender();
+
+    bindChartTooltip(UI.dailyGraph);
+    bindChartTooltip(UI.weeklyGraph);
 
     // 1. 탭 전환
     UI.tabs.forEach(tab => {
