@@ -15,8 +15,30 @@
     --radius-lg: 18px;
     
     /* Stats Colors */
-    --color-blocked: #ef4444; /* Red */
-    --color-safe: #10b981; /* Emerald/Green */
+    --color-blocked: #dc2626; /* Red-600 */
+    --color-safe: #059669; /* Emerald-600 */
+
+    /* Semantic button colors */
+    --btn-danger-bg: var(--color-blocked);
+    --btn-danger-hover: #b91c1c; /* Red-700 */
+    --btn-danger-fg: #ffffff;
+    --btn-danger-border: transparent;
+
+    --btn-safe-bg: var(--color-safe);
+    --btn-safe-hover: #047857; /* Emerald-700 */
+    --btn-safe-fg: #ffffff;
+    --btn-safe-border: transparent;
+
+    --btn-neutral-bg: #e2e8f0; /* Slate-200 */
+    --btn-neutral-hover: #cbd5e1; /* Slate-300 */
+    --btn-neutral-fg: #334155; /* Slate-700 */
+    --btn-neutral-border: #cbd5e1;
+
+    /* UI accents */
+    --usage-bar-bg: rgba(99, 102, 241, 0.10);
+    --usage-bar-blocked-bg: rgba(220, 38, 38, 0.12);
+    --accent-gradient-to: #8b5cf6; /* Violet-500 */
+    --accent-ring: rgba(99, 102, 241, 0.20);
 }
 
 body.dark {
@@ -31,8 +53,29 @@ body.dark {
     --border-color: #334155;
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
     --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
-    --color-blocked: #f87171;
-    --color-safe: #34d399;
+    --color-blocked: #f43f5e; /* Rose-500 */
+    --color-safe: #10b981; /* Emerald-500 */
+
+    /* Dark mode: keep meaning but reduce saturation via tinted buttons */
+    --btn-danger-bg: rgba(244, 63, 94, 0.18);
+    --btn-danger-hover: rgba(244, 63, 94, 0.26);
+    --btn-danger-fg: #fecdd3; /* Rose-200 */
+    --btn-danger-border: rgba(244, 63, 94, 0.35);
+
+    --btn-safe-bg: rgba(16, 185, 129, 0.16);
+    --btn-safe-hover: rgba(16, 185, 129, 0.24);
+    --btn-safe-fg: #a7f3d0; /* Emerald-200 */
+    --btn-safe-border: rgba(16, 185, 129, 0.32);
+
+    --btn-neutral-bg: rgba(148, 163, 184, 0.16);
+    --btn-neutral-hover: rgba(148, 163, 184, 0.24);
+    --btn-neutral-fg: #e2e8f0; /* Slate-200 */
+    --btn-neutral-border: rgba(148, 163, 184, 0.28);
+
+    --usage-bar-bg: rgba(129, 140, 248, 0.14);
+    --usage-bar-blocked-bg: rgba(244, 63, 94, 0.18);
+    --accent-gradient-to: rgba(139, 92, 246, 0.85);
+    --accent-ring: rgba(129, 140, 248, 0.22);
 }
 
 /* Base Styles */
@@ -107,7 +150,7 @@ body.dark .dark-mode-toggle-btn:hover {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
 }
 .recap-mode-toggle button {
-    border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main); padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;
+    border: 1px solid var(--border-color); background: transparent; color: var(--text-main); padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;
 }
 .recap-mode-toggle button:hover { background: var(--border-color); }
 .recap-mode-toggle .sort-options button.active {
@@ -126,11 +169,11 @@ body.dark .dark-mode-toggle-btn:hover {
     position: relative; overflow: hidden; border: 1px solid var(--border-color);
 }
 .usage-bar {
-    position: absolute; top: 0; left: 0; bottom: 0; background: rgba(99, 102, 241, 0.1); transition: width 0.5s ease;
+    position: absolute; top: 0; left: 0; bottom: 0; background: var(--usage-bar-bg); transition: width 0.5s ease;
     z-index: 1;
 }
 .usage-bar.is-blocked {
-    background: rgba(239, 68, 68, 0.15);
+    background: var(--usage-bar-blocked-bg);
 }
 .recap-content {
     display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2;
@@ -142,12 +185,26 @@ body.dark .dark-mode-toggle-btn:hover {
 .stats-group { display: flex; align-items: center; gap: 20px; }
 .time { font-weight: 700; font-size: 1.1em; }
 .list-block-btn {
-    background: var(--color-blocked); color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: background 0.2s;
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-fg);
+    border: 1px solid var(--btn-danger-border);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
     font-size: 0.9em;
 }
-.list-block-btn:hover { background: #dc2626; }
-.list-block-btn.is-blocked { background: var(--color-safe); }
-.list-block-btn.is-blocked:hover { background: #059669; }
+.list-block-btn:hover { background: var(--btn-danger-hover); }
+.list-block-btn.is-blocked {
+    background: var(--btn-neutral-bg);
+    color: var(--btn-neutral-fg);
+    border-color: var(--btn-neutral-border);
+}
+.list-block-btn.is-blocked:hover { background: var(--btn-neutral-hover); }
+.list-block-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 
 /* Detailed Recap Styles */
 .detailed-analysis { display: none; margin-top: 20px; }
@@ -199,7 +256,16 @@ body.dark .dark-mode-toggle-btn:hover {
     background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);
 }
 .block-list li span { font-weight: 500; }
-.block-list .list-block-btn { background: var(--color-blocked); }
+.block-list .list-block-btn,
+.block-list .list-block-btn.is-blocked {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-fg);
+    border-color: var(--btn-danger-border);
+}
+.block-list .list-block-btn:hover,
+.block-list .list-block-btn.is-blocked:hover {
+    background: var(--btn-danger-hover);
+}
 
 /* Settings Styles */
 .settings-grid {
@@ -251,7 +317,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     position: absolute; 
     top: 10px; 
     height: 10px; 
-    background: linear-gradient(90deg, var(--accent), #a855f7); 
+    background: linear-gradient(90deg, var(--accent), var(--accent-gradient-to)); 
     border-radius: 10px; 
 }
 .slider-handle { 
@@ -265,6 +331,18 @@ input:checked + .slider:before { transform: translateX(22px); }
     transition: box-shadow 0.2s;
 }
 .slider-handle:hover {
-    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 8px var(--accent-ring);
 }
 body.dark .slider-handle { border: 4px solid var(--bg-main); }
+
+/* Focus styles */
+.primary-btn:focus-visible,
+.nav-btn:focus-visible,
+.dark-mode-toggle-btn:focus-visible,
+.recap-mode-toggle button:focus-visible,
+.date-input:focus-visible,
+.block-add-panel input:focus-visible,
+.input-value:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
