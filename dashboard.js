@@ -116,6 +116,14 @@ function loadDataAndRender() {
 
         renderActiveTab();
     });
+
+    chrome.runtime.sendMessage({ action: "DEBUG_GET_CACHE" }, (resp) => {
+        if (resp && resp.cache && resp.loaded) {
+            // background에 더 최신 데이터가 있을 수 있으므로 덮어쓰기
+            currentStats = resp.cache;
+            renderActiveTab();
+        }
+    });
 }
 
 /**
