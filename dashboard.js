@@ -113,6 +113,9 @@ function loadDataAndRender() {
         } else {
             document.body.classList.remove('dark');
         }
+        if (UI.darkModeToggle) {
+            UI.darkModeToggle.checked = !!items.darkMode;
+        }
 
         renderActiveTab();
     });
@@ -440,9 +443,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 2. 다크 모드 토글 (UI 즉시 갱신 포함)
-    UI.darkModeToggle.addEventListener('click', () => {
-        document.body.classList.toggle('dark');
-        const isDark = document.body.classList.contains('dark');
+    if (UI.darkModeToggle) UI.darkModeToggle.addEventListener('change', () => {
+        const isDark = !!UI.darkModeToggle.checked;
+        document.body.classList.toggle('dark', isDark);
         chrome.storage.local.set({ darkMode: isDark }, () => {
             // 다크모드 변경 후 UI 요소들의 가독성을 위해 현재 탭 재렌더링
             renderActiveTab();

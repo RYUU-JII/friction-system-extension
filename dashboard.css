@@ -140,6 +140,35 @@ body.dark .dark-mode-toggle-btn:hover {
 }
 /* ----- */
 
+/* Theme Toggle (fixed top-right) */
+.theme-toggle-fixed {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    z-index: 50;
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+}
+.theme-toggle-label {
+    font-weight: 600;
+    color: var(--text-main);
+    user-select: none;
+}
+@media (max-width: 720px) {
+    .theme-toggle-fixed {
+        left: 12px;
+        bottom: 12px;
+    }
+}
+
 
 /* Tab Content */
 .tab-content { display: none; }
