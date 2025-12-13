@@ -24,6 +24,10 @@ const SETTING_METADATA = {
     scrollFriction: { label: "스크롤 마찰", type: "number", unit: "ms", placeholder: "예: 50", min: "0", step: "10" },
     desaturation: { label: "채도 감소", type: "text", unit: "%", placeholder: "예: 50%" },
     letterSpacing: { label: "텍스트 자간 늘리기", type: "text", unit: "em", placeholder: "예: 0.1em" },
+    textOpacity: { label: "텍스트 투명도", type: "number", unit: "", placeholder: "예: 0.9", min: "0.1", step: "0.05" },
+    textBlur: { label: "텍스트 블러", type: "number", unit: "px", placeholder: "예: 0.3", min: "0", step: "0.1" },
+    mediaOpacity: { label: "미디어 투명도", type: "number", unit: "", placeholder: "예: 0.9", min: "0.1", step: "0.05" },
+    mediaBrightness: { label: "미디어 밝기", type: "number", unit: "%", placeholder: "예: 90", min: "10", step: "5" },
 };
 
 // ===========================================================
@@ -460,13 +464,9 @@ function displaySettings() {
         const meta = SETTING_METADATA[key];
 
         let inputValue = setting.value || '';
-        // 'text' 타입 (CSS 속성)이고, 값이 문자열인 경우에만 처리
-        if (meta.type !== 'number' && typeof inputValue === 'string') {
-            // 정규식을 사용하여 숫자 및 소수점만 추출 (예: "1.5px" -> "1.5")
+        if (typeof inputValue === 'string') {
             const match = inputValue.match(/^-?(\d*\.)?\d+/);
-            if (match) {
-                inputValue = match[0];
-            }
+            if (match) inputValue = match[0];
         }
         
         const card = document.createElement('div');
