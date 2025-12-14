@@ -454,13 +454,98 @@ body:not(.dark) .bar-segment + .bar-segment {
 .settings-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;
 }
+.settings-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.settings-preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 720px) {
+    .settings-preview-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.preview-col-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.preview-frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-main);
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+}
+.preview-media {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.preview-text {
+    width: 100%;
+    height: 100%;
+    padding: 14px;
+    display: block;
+    overflow: hidden;
+    color: var(--text-main);
+    background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+    font-size: 15px;
+    line-height: 1.5;
+}
+body.dark .preview-text {
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.00));
+}
+.preview-placeholder {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 13px;
+}
 .setting-card {
     background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px;
+}
+.setting-card.is-disabled {
+    opacity: 0.8;
 }
 .setting-header {
     display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
 }
 .setting-header label { font-weight: 600; color: var(--text-main); }
+.setting-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.input-range {
+    width: 100%;
+    flex: 1;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+}
+.setting-output {
+    min-width: 86px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-weight: 700;
+}
 .input-value {
     padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); color: var(--text-main);
 }
