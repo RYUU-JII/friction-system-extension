@@ -17,7 +17,8 @@
 const STYLES = {
     VISUAL: { ID: 'friction-visual-style', ATTR: 'data-visual-applied' },
     DELAY: { ID: 'friction-delay-style', ATTR: 'data-delay-applied' },
-    SPACING: { ID: 'friction-spacing-style', ATTR: 'data-spacing-applied' }
+    SPACING: { ID: 'friction-spacing-style', ATTR: 'data-spacing-applied' },
+    TEXT_SHUFFLE: { ID: 'friction-text-shuffle-style', ATTR: 'data-text-shuffle-pending' }
 };
 
 const ATTRS = {
@@ -165,13 +166,17 @@ const DelayManager = {
 const TextManager = {
     update(filters) {
         const spacing = filters.letterSpacing;
+        const lineHeight = filters.lineHeight;
         const textOpacity = filters.textOpacity;
         const textBlur = filters.textBlur;
+        const textShadow = filters.textShadow;
 
         const isActive =
             (spacing && spacing.isActive) ||
+            (lineHeight && lineHeight.isActive) ||
             (textOpacity && textOpacity.isActive) ||
-            (textBlur && textBlur.isActive);
+            (textBlur && textBlur.isActive) ||
+            (textShadow && textShadow.isActive);
 
         if (!isActive) {
             this.remove();
@@ -187,15 +192,18 @@ const TextManager = {
 
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const spacingValue = spacing && spacing.isActive ? spacing.value : 'normal';
+        const lineHeightValue = lineHeight && lineHeight.isActive ? lineHeight.value : 'normal';
         const opacityValue = textOpacity && textOpacity.isActive ? textOpacity.value : null;
         const blurValue = textBlur && textBlur.isActive ? textBlur.value : null;
+        const shadowValue = textShadow && textShadow.isActive ? textShadow.value : null;
 
-        const visualTextRules = (opacityValue || blurValue)
+        const visualTextRules = (opacityValue || blurValue || shadowValue)
             ? `
                 ${SELECTORS.TEXT_VISUAL_TARGETS} {
                     ${opacityValue ? `opacity: ${opacityValue} !important;` : ''}
                     ${blurValue ? `filter: blur(${blurValue}) !important;` : ''}
-                    transition: opacity 0.15s ease, filter 0.15s ease;
+                    ${shadowValue ? `text-shadow: ${shadowValue} !important;` : ''}
+                    transition: opacity 0.15s ease, filter 0.15s ease, text-shadow 0.15s ease;
                 }
             `
             : '';
@@ -203,7 +211,8 @@ const TextManager = {
         style.textContent = `
             ${SELECTORS.TEXT_LAYOUT_TARGETS} {
                 letter-spacing: ${spacingValue} !important;
-                transition: letter-spacing 0.3s ease;
+                line-height: ${lineHeightValue} !important;
+                transition: letter-spacing 0.3s ease, line-height 0.3s ease;
             }
             ${visualTextRules}
 
@@ -212,7 +221,9 @@ const TextManager = {
             ${overlayExempt} * {
                 opacity: 1 !important;
                 filter: none !important;
+                text-shadow: none !important;
                 letter-spacing: normal !important;
+                line-height: normal !important;
             }
         `;
 
@@ -253,10 +264,432 @@ const TextManager = {
     },
 };
 
+const TextShuffleManager = {
+    enabled: false,
+    probability: 0,
+    touchedElements: new Set(),
+    touchedNodes: new Set(),
+    originalTextByNode: new WeakMap(),
+    observer: null,
+    debounceTimer: null,
+    pendingSubtrees: new Set(),
+    pendingTextNodes: new Set(),
+    initialPassDone: false,
+
+    update(setting) {
+        const enabled = !!setting?.isActive;
+        const probability = typeof setting?.value === 'number' ? setting.value : Number(setting?.value);
+        const normalizedProbability = Number.isFinite(probability) ? Math.max(0, Math.min(1, probability)) : 0;
+
+        if (!enabled || normalizedProbability <= 0) {
+            this.disable();
+            return;
+        }
+
+        this.enabled = true;
+        this.probability = normalizedProbability;
+        this.maybeShieldInitialPaint();
+        this.applyAll();
+        this.ensureObserver();
+        this.initialPassDone = true;
+    },
+
+    disable() {
+        if (!this.enabled && this.touchedNodes.size === 0 && this.touchedElements.size === 0) return;
+        this.enabled = false;
+        this.probability = 0;
+        this.pendingSubtrees.clear();
+        this.pendingTextNodes.clear();
+        this.teardownObserver();
+        this.removeInitialPaintShield();
+        this.restoreAll();
+    },
+
+    ensureObserver() {
+        if (this.observer) return;
+        this.observer = new MutationObserver((mutations) => {
+            if (!this.enabled) return;
+
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList') {
+                    for (const addedNode of mutation.addedNodes) {
+                        this.enqueueNode(addedNode);
+                    }
+                } else if (mutation.type === 'characterData') {
+                    this.enqueueNode(mutation.target);
+                }
+            }
+
+            if (this.debounceTimer) clearTimeout(this.debounceTimer);
+            this.debounceTimer = setTimeout(() => this.flushPending(), 200);
+        });
+        this.observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    },
+
+    teardownObserver() {
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+        if (this.observer) this.observer.disconnect();
+        this.observer = null;
+    },
+
+    restoreAll() {
+        for (const node of Array.from(this.touchedNodes)) {
+            if (!node || !node.isConnected) {
+                this.touchedNodes.delete(node);
+                continue;
+            }
+            const original = this.originalTextByNode.get(node);
+            if (typeof original === 'string') node.nodeValue = original;
+        }
+        this.touchedNodes.clear();
+        this.originalTextByNode = new WeakMap();
+
+        for (const el of Array.from(this.touchedElements)) {
+            if (!el || !el.isConnected) {
+                this.touchedElements.delete(el);
+                continue;
+            }
+            el.removeAttribute('data-friction-shuffled');
+        }
+        this.touchedElements.clear();
+    },
+
+    maybeShieldInitialPaint() {
+        if (this.initialPassDone) return;
+        if (document.readyState !== 'loading') return;
+        if (!document.documentElement) return;
+
+        let style = document.getElementById(STYLES.TEXT_SHUFFLE.ID);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = STYLES.TEXT_SHUFFLE.ID;
+            style.textContent = `
+                html[${STYLES.TEXT_SHUFFLE.ATTR}="1"] ${SELECTORS.TEXT_VISUAL_TARGETS} {
+                    visibility: hidden !important;
+                }
+            `;
+
+            const mount = document.head || document.documentElement;
+            mount.appendChild(style);
+        }
+
+        document.documentElement.setAttribute(STYLES.TEXT_SHUFFLE.ATTR, '1');
+    },
+
+    removeInitialPaintShield() {
+        if (!document.documentElement) return;
+        document.documentElement.removeAttribute(STYLES.TEXT_SHUFFLE.ATTR);
+        const style = document.getElementById(STYLES.TEXT_SHUFFLE.ID);
+        if (style) style.remove();
+    },
+
+    enqueueNode(node) {
+        if (!node) return;
+        if (node.nodeType === Node.TEXT_NODE) {
+            this.pendingTextNodes.add(node);
+            return;
+        }
+        if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+            for (const child of Array.from(node.childNodes || [])) this.enqueueNode(child);
+            return;
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            this.pendingSubtrees.add(node);
+        }
+    },
+
+    flushPending() {
+        if (!this.enabled) {
+            this.pendingSubtrees.clear();
+            this.pendingTextNodes.clear();
+            return;
+        }
+
+        const overlayExemptSelector = ':is([role="dialog"], [aria-modal="true"])';
+        const excludedClosestSelector = [
+            'script',
+            'style',
+            'noscript',
+            'textarea',
+            'input',
+            'select',
+            'option',
+            'pre',
+            'code',
+            'svg',
+            'math',
+            '[contenteditable="true"]',
+            '[contenteditable=""]'
+        ].join(', ');
+
+        let processed = 0;
+
+        for (const node of Array.from(this.pendingTextNodes)) {
+            if (processed >= 400) break;
+            if (this.shuffleTextNode(node, overlayExemptSelector, excludedClosestSelector)) processed++;
+        }
+
+        for (const subtree of Array.from(this.pendingSubtrees)) {
+            if (processed >= 600) break;
+            processed += this.applyToSubtree(subtree, overlayExemptSelector, excludedClosestSelector, 600 - processed);
+        }
+
+        this.pendingSubtrees.clear();
+        this.pendingTextNodes.clear();
+    },
+
+    shuffleTextNode(node, overlayExemptSelector, excludedClosestSelector) {
+        if (!node || typeof node.nodeValue !== 'string') return false;
+        if (this.originalTextByNode.has(node)) return false;
+
+        const parent = node.parentElement;
+        if (!parent) return false;
+        if (parent.closest(overlayExemptSelector)) return false;
+        if (parent.closest(excludedClosestSelector)) return false;
+        if (parent.isContentEditable) return false;
+
+        const original = node.nodeValue ?? '';
+        const text = original.trim();
+        if (!text) return false;
+        if (text.length < 8) return false;
+        if (text.length > 2000) return false;
+
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length < 4) return false;
+        if (words.length > 220) return false;
+
+        if (Math.random() > this.probability) return false;
+
+        const leading = original.match(/^\s*/)?.[0] ?? '';
+        const trailing = original.match(/\s*$/)?.[0] ?? '';
+
+        this.originalTextByNode.set(node, original);
+        this.touchedNodes.add(node);
+
+        for (let i = words.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [words[i], words[j]] = [words[j], words[i]];
+        }
+
+        node.nodeValue = leading + words.join(' ') + trailing;
+
+        if (parent instanceof HTMLElement) {
+            parent.setAttribute('data-friction-shuffled', '1');
+            this.touchedElements.add(parent);
+        }
+        return true;
+    },
+
+    applyToSubtree(rootNode, overlayExemptSelector, excludedClosestSelector, limit = 600) {
+        if (!rootNode || limit <= 0) return 0;
+        if (rootNode.nodeType === Node.TEXT_NODE) {
+            return this.shuffleTextNode(rootNode, overlayExemptSelector, excludedClosestSelector) ? 1 : 0;
+        }
+        if (rootNode.nodeType !== Node.ELEMENT_NODE && rootNode.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return 0;
+
+        const walker = document.createTreeWalker(
+            rootNode,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => {
+                    if (!node || typeof node.nodeValue !== 'string') return NodeFilter.FILTER_REJECT;
+                    if (this.originalTextByNode.has(node)) return NodeFilter.FILTER_REJECT;
+
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    if (parent.closest(overlayExemptSelector)) return NodeFilter.FILTER_REJECT;
+                    if (parent.closest(excludedClosestSelector)) return NodeFilter.FILTER_REJECT;
+                    if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
+
+                    const text = node.nodeValue.trim();
+                    if (!text) return NodeFilter.FILTER_REJECT;
+                    if (text.length < 8) return NodeFilter.FILTER_REJECT;
+                    if (text.length > 2000) return NodeFilter.FILTER_REJECT;
+
+                    const words = text.split(/\s+/).filter(Boolean);
+                    if (words.length < 4) return NodeFilter.FILTER_REJECT;
+                    if (words.length > 220) return NodeFilter.FILTER_REJECT;
+
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            },
+            false
+        );
+
+        let processed = 0;
+        while (processed < limit) {
+            const node = walker.nextNode();
+            if (!node) break;
+            if (this.shuffleTextNode(node, overlayExemptSelector, excludedClosestSelector)) processed++;
+        }
+        return processed;
+    },
+
+    applyAll() {
+        if (!this.enabled) return;
+
+        const root = document.body || document.documentElement;
+        if (!root) return;
+
+        const overlayExemptSelector = ':is([role="dialog"], [aria-modal="true"])';
+        const excludedClosestSelector = [
+            'script',
+            'style',
+            'noscript',
+            'textarea',
+            'input',
+            'select',
+            'option',
+            'pre',
+            'code',
+            'svg',
+            'math',
+            '[contenteditable="true"]',
+            '[contenteditable=""]'
+        ].join(', ');
+
+        this.applyToSubtree(root, overlayExemptSelector, excludedClosestSelector, 900);
+        this.removeInitialPaintShield();
+    }
+};
+
+const InputDelayManager = {
+    active: false,
+    delayMs: 0,
+    composing: false,
+    boundBeforeInput: null,
+    boundPaste: null,
+    boundCompositionStart: null,
+    boundCompositionEnd: null,
+
+    apply(value) {
+        const delayMs = Number(value) || 0;
+        if (delayMs <= 0) {
+            this.remove();
+            return;
+        }
+
+        this.delayMs = delayMs;
+        if (this.active) return;
+
+        this.boundBeforeInput = this.handleBeforeInput.bind(this);
+        this.boundPaste = this.handlePaste.bind(this);
+        this.boundCompositionStart = () => { this.composing = true; };
+        this.boundCompositionEnd = () => { this.composing = false; };
+
+        document.addEventListener('compositionstart', this.boundCompositionStart, true);
+        document.addEventListener('compositionend', this.boundCompositionEnd, true);
+        document.addEventListener('beforeinput', this.boundBeforeInput, true);
+        document.addEventListener('paste', this.boundPaste, true);
+        this.active = true;
+    },
+
+    remove() {
+        if (!this.active) {
+            this.delayMs = 0;
+            this.composing = false;
+            return;
+        }
+
+        document.removeEventListener('compositionstart', this.boundCompositionStart, true);
+        document.removeEventListener('compositionend', this.boundCompositionEnd, true);
+        document.removeEventListener('beforeinput', this.boundBeforeInput, true);
+        document.removeEventListener('paste', this.boundPaste, true);
+
+        this.boundBeforeInput = null;
+        this.boundPaste = null;
+        this.boundCompositionStart = null;
+        this.boundCompositionEnd = null;
+
+        this.delayMs = 0;
+        this.composing = false;
+        this.active = false;
+    },
+
+    isTextInput(el) {
+        if (!el) return false;
+        if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled;
+        if (!(el instanceof HTMLInputElement)) return false;
+        const disallowedTypes = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'submit', 'button', 'image', 'reset', 'hidden']);
+        if (disallowedTypes.has(el.type)) return false;
+        return !el.readOnly && !el.disabled;
+    },
+
+    handleBeforeInput(e) {
+        if (!this.active || this.delayMs <= 0) return;
+        if (e.isComposing || this.composing) return;
+
+        const target = e.target;
+        if (!this.isTextInput(target)) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+
+        const inputType = e.inputType || '';
+        if (inputType.startsWith('insertFromPaste')) return;
+
+        const supported = new Set(['insertText', 'deleteContentBackward', 'deleteContentForward']);
+        if (!supported.has(inputType)) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        const data = e.data;
+        const action = () => {
+            try {
+                const start = target.selectionStart ?? 0;
+                const end = target.selectionEnd ?? start;
+
+                if (inputType === 'insertText') {
+                    const text = data ?? '';
+                    target.setRangeText(text, start, end, 'end');
+                } else if (inputType === 'deleteContentBackward') {
+                    if (start !== end) target.setRangeText('', start, end, 'end');
+                    else if (start > 0) target.setRangeText('', start - 1, start, 'end');
+                } else if (inputType === 'deleteContentForward') {
+                    if (start !== end) target.setRangeText('', start, end, 'end');
+                    else target.setRangeText('', start, Math.min((target.value || '').length, start + 1), 'end');
+                }
+
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch (_) {
+                // no-op: fail safe to avoid breaking input
+            }
+        };
+
+        setTimeout(action, this.delayMs);
+    },
+
+    handlePaste(e) {
+        if (!this.active || this.delayMs <= 0) return;
+        if (e.isComposing || this.composing) return;
+
+        const target = e.target;
+        if (!this.isTextInput(target)) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+
+        const text = e.clipboardData?.getData('text');
+        if (typeof text !== 'string') return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        setTimeout(() => {
+            try {
+                const start = target.selectionStart ?? 0;
+                const end = target.selectionEnd ?? start;
+                target.setRangeText(text, start, end, 'end');
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch (_) {
+                // no-op
+            }
+        }, this.delayMs);
+    }
+};
+
 const InteractionManager = {
     handleClick(e) {
         const el = e.target.closest(SELECTORS.INTERACTIVE_TARGETS);
-    
+     
         if (!el) return;
 
         // ⭐️ [이전 수정]: 클릭된 실제 요소가 <img> 태그라면 즉시 우회
@@ -449,6 +882,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           VisualManager.remove();
           DelayManager.remove();
           TextManager.remove();
+          TextShuffleManager.disable();
+          InputDelayManager.remove();
           InteractionManager.removeClickDelay();
           InteractionManager.removeScroll();
           return;
@@ -461,6 +896,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
     else DelayManager.remove();
 
+    if (filters.inputDelay?.isActive) InputDelayManager.apply(filters.inputDelay.value);
+    else InputDelayManager.remove();
+
     if (filters.clickDelay?.isActive) InteractionManager.applyClickDelay(filters.clickDelay.value);
     else InteractionManager.removeClickDelay();
 
@@ -468,6 +906,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     else InteractionManager.removeScroll();
 
       TextManager.update(filters);
+      TextShuffleManager.update(filters.textShuffle);
   });
 
 // ===========================================================
@@ -505,26 +944,36 @@ chrome.storage.local.get({
     blockedUrls: [], 
     schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
      filterSettings: {
-         blur: { isActive: false, value: '1.5px' },
-         delay: { isActive: false, value: '0.5s' },
-         desaturation: { isActive: false, value: '50%' },
-         letterSpacing: { isActive: false, value: '0.1em' },
-         textOpacity: { isActive: false, value: '0.9' },
-         textBlur: { isActive: false, value: '0.3px' },
-         mediaOpacity: { isActive: false, value: '0.9' },
-         mediaBrightness: { isActive: false, value: '90%' }
-     } 
- }, (items) => {
+          blur: { isActive: false, value: '1.5px' },
+          delay: { isActive: false, value: '0.5s' },
+          clickDelay: { isActive: false, value: 1000 },
+          scrollFriction: { isActive: false, value: 50 },
+          desaturation: { isActive: false, value: '50%' },
+          letterSpacing: { isActive: false, value: '0.1em' },
+          textOpacity: { isActive: false, value: '0.9' },
+          textBlur: { isActive: false, value: '0.3px' },
+          lineHeight: { isActive: false, value: '1.45' },
+          textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
+          textShuffle: { isActive: false, value: 0.15 },
+          mediaOpacity: { isActive: false, value: '0.9' },
+          mediaBrightness: { isActive: false, value: '90%' },
+          inputDelay: { isActive: false, value: 120 },
+      } 
+  }, (items) => {
     
     const url = window.location.href;
     const hostname = getHostname(url);
     const isBlocked = hostname && items.blockedUrls.includes(hostname);
     const isTimeActive = checkTimeCondition(items.schedule); 
 
-     if (isBlocked && isTimeActive) {
-         const filters = items.filterSettings;
-         TextManager.update(filters);
-         if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
-         VisualManager.update(filters);
-     }
- });
+      if (isBlocked && isTimeActive) {
+          const filters = items.filterSettings;
+          TextManager.update(filters);
+          TextShuffleManager.update(filters.textShuffle);
+          if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
+          if (filters.inputDelay?.isActive) InputDelayManager.apply(filters.inputDelay.value);
+          if (filters.clickDelay?.isActive) InteractionManager.applyClickDelay(filters.clickDelay.value);
+          if (filters.scrollFriction?.isActive) InteractionManager.applyScroll(filters.scrollFriction.value);
+          VisualManager.update(filters);
+      }
+  });

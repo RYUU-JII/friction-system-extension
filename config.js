@@ -10,10 +10,16 @@ export const CONFIG_DEFAULT_LETTER_SPACING_VALUE = '0.1em';
 // Text friction (visual)
 export const CONFIG_DEFAULT_TEXT_OPACITY_VALUE = '0.9';
 export const CONFIG_DEFAULT_TEXT_BLUR_VALUE = '0.3px';
+export const CONFIG_DEFAULT_LINE_HEIGHT_VALUE = '1.45';
+export const CONFIG_DEFAULT_TEXT_SHADOW_VALUE = '0 1px 0 rgba(0,0,0,0.25)';
+export const CONFIG_DEFAULT_TEXT_SHUFFLE_PROBABILITY = 0.15;
 
 // Media friction (visual)
 export const CONFIG_DEFAULT_MEDIA_OPACITY_VALUE = '0.9';
 export const CONFIG_DEFAULT_MEDIA_BRIGHTNESS_VALUE = '90%';
+
+// Delay friction (interaction)
+export const CONFIG_DEFAULT_INPUT_DELAY_MS = 120;
 
 export const CONFIG_DEFAULT_FILTER_SETTINGS = {
     blur: { isActive: true, value: CONFIG_DEFAULT_BLUR_VALUE },
@@ -24,6 +30,10 @@ export const CONFIG_DEFAULT_FILTER_SETTINGS = {
     letterSpacing: { isActive: true, value: CONFIG_DEFAULT_LETTER_SPACING_VALUE },
     textOpacity: { isActive: false, value: CONFIG_DEFAULT_TEXT_OPACITY_VALUE },
     textBlur: { isActive: false, value: CONFIG_DEFAULT_TEXT_BLUR_VALUE },
+    lineHeight: { isActive: false, value: CONFIG_DEFAULT_LINE_HEIGHT_VALUE },
+    textShadow: { isActive: false, value: CONFIG_DEFAULT_TEXT_SHADOW_VALUE },
+    textShuffle: { isActive: false, value: CONFIG_DEFAULT_TEXT_SHUFFLE_PROBABILITY },
     mediaOpacity: { isActive: false, value: CONFIG_DEFAULT_MEDIA_OPACITY_VALUE },
     mediaBrightness: { isActive: false, value: CONFIG_DEFAULT_MEDIA_BRIGHTNESS_VALUE },
+    inputDelay: { isActive: false, value: CONFIG_DEFAULT_INPUT_DELAY_MS },
 };

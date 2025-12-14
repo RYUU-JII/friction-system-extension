@@ -1,6 +1,25 @@
 import { CONFIG_DEFAULT_FILTER_SETTINGS } from './config.js';
 
 const DEFAULT_FILTER_SETTINGS = CONFIG_DEFAULT_FILTER_SETTINGS;
+
+function mergeFilterSettings(partial) {
+    const merged = {};
+    const source = partial && typeof partial === 'object' ? partial : {};
+
+    for (const [key, def] of Object.entries(DEFAULT_FILTER_SETTINGS)) {
+        const current = source[key];
+        merged[key] = {
+            isActive: typeof current?.isActive === 'boolean' ? current.isActive : def.isActive,
+            value: current?.value !== undefined ? current.value : def.value,
+        };
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+        if (!(key in merged)) merged[key] = value;
+    }
+
+    return merged;
+}
 const TRACKING_INTERVAL_MS = 20000; // 20초
 const MAX_ELAPSED_LIMIT = TRACKING_INTERVAL_MS * 1.5;
 const MAX_DAYS_STORED = 30;
@@ -271,7 +290,7 @@ async function sendFrictionMessage(tabId, url) {
     try {
         await chrome.tabs.sendMessage(tabId, {
             isBlocked: shouldApplyFilter,
-            filters: items.filterSettings,
+            filters: mergeFilterSettings(items.filterSettings),
         });
     } catch (e) {
         // 탭이 아직 로드되지 않았거나 닫힌 경우 무시

@@ -13,6 +13,7 @@ let currentSchedule = { scheduleActive: false, startMin: 0, endMin: 1440 };
 
 let isBackgroundMode = false;
 let isDailyMode = true;
+let currentSettingsSubtab = 'media';
 
 // DOM 요소 참조를 담을 객체 (스코프 문제 해결의 핵심)
 const UI = {};
@@ -33,6 +34,47 @@ const SETTING_METADATA = {
 // ===========================================================
 // 2. 헬퍼 함수
 // ===========================================================
+
+const SETTING_METADATA_V2 = {
+    // Media filters
+    blur: { label: "블러", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "media", order: 10, placeholder: "1.5", min: "0", step: "0.1" },
+    desaturation: { label: "채도 감소", type: "number", unit: "%", unitSuffix: "%", storage: "cssUnit", category: "media", order: 20, placeholder: "50", min: "0", step: "5" },
+    mediaBrightness: { label: "밝기", type: "number", unit: "%", unitSuffix: "%", storage: "cssUnit", category: "media", order: 30, placeholder: "90", min: "0", step: "5" },
+    mediaOpacity: { label: "투명도", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "media", order: 40, placeholder: "0.9", min: "0.05", step: "0.05" },
+
+    // Text filters
+    letterSpacing: { label: "자간", type: "number", unit: "em", unitSuffix: "em", storage: "cssUnit", category: "text", order: 10, placeholder: "0.1", min: "0", step: "0.01" },
+    lineHeight: { label: "행간", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "text", order: 20, placeholder: "1.45", min: "1", step: "0.05" },
+    textBlur: { label: "텍스트 블러", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "text", order: 30, placeholder: "0.3", min: "0", step: "0.1" },
+    textOpacity: { label: "텍스트 투명도", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "text", order: 40, placeholder: "0.9", min: "0.05", step: "0.05" },
+    textShadow: { label: "텍스트 그림자", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "text", order: 50, placeholder: "예: 0 1px 0 rgba(0,0,0,0.25)" },
+    textShuffle: { label: "셔플(단어)", type: "number", unit: "", unitSuffix: "", storage: "number", category: "text", order: 60, placeholder: "0.15", min: "0", step: "0.05" },
+
+    // Delay filters
+    delay: { label: "반응 지연", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "delay", order: 10, placeholder: "예: 0.5s" },
+    clickDelay: { label: "클릭 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 20, placeholder: "1000", min: "0", step: "100" },
+    scrollFriction: { label: "스크롤 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 30, placeholder: "50", min: "0", step: "10" },
+    inputDelay: { label: "입력 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 40, placeholder: "120", min: "0", step: "10" },
+};
+
+function mergeFilterSettings(partial) {
+    const merged = {};
+    const source = partial && typeof partial === 'object' ? partial : {};
+
+    for (const [key, def] of Object.entries(CONFIG_DEFAULT_FILTER_SETTINGS)) {
+        const current = source[key];
+        merged[key] = {
+            isActive: typeof current?.isActive === 'boolean' ? current.isActive : def.isActive,
+            value: current?.value !== undefined ? current.value : def.value,
+        };
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+        if (!(key in merged)) merged[key] = value;
+    }
+
+    return merged;
+}
 
 function minToTime(minutes) {
     const h = Math.floor(minutes / 60);
@@ -175,6 +217,7 @@ function initDOMReferences() {
 
     // Settings 탭
     UI.settingsGrid = document.querySelector('.settings-grid');
+    UI.settingsSubtabButtons = document.querySelectorAll('.settings-subtab-btn');
     UI.saveSettingsBtn = document.getElementById('saveSettingsBtn');
     UI.saveStatus = document.getElementById('saveStatus');
 
@@ -202,7 +245,7 @@ function loadDataAndRender() {
     }, (items) => {
         currentStats = items.stats || { dates: {} };
         currentBlockedUrls = items.blockedUrls || [];
-        currentSettings = items.filterSettings || CONFIG_DEFAULT_FILTER_SETTINGS;
+        currentSettings = mergeFilterSettings(items.filterSettings);
         currentSchedule = items.schedule;
 
         // 다크모드 적용
@@ -240,7 +283,7 @@ function renderActiveTab() {
         case 'overview': displayOverview(); break;
         case 'detailed-recap': displayDetailedRecap(); break;
         case 'blocklist': displayBlockList(); break;
-        case 'settings': displaySettings(); break;
+        case 'settings': syncSettingsSubtabUI(); displaySettingsV2(); break;
         case 'schedule': initScheduleSlider(); break;
     }
 }
@@ -499,6 +542,119 @@ function displaySettings() {
 // 5. 스케줄 슬라이더 로직
 // ===========================================================
 
+function valueForInputV2(meta, storedValue) {
+    const value = storedValue ?? '';
+
+    if (meta.storage === 'ms') {
+        if (typeof value === 'number') return value;
+        const n = parseInt(String(value), 10);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    if (meta.storage === 'raw') return String(value);
+
+    if (meta.storage === 'cssUnit') {
+        const s = String(value);
+        if (meta.unitSuffix && s.endsWith(meta.unitSuffix)) return s.slice(0, -meta.unitSuffix.length);
+        const match = s.match(/^-?(\\d*\\.)?\\d+/);
+        return match ? match[0] : '';
+    }
+
+    if (meta.storage === 'number') {
+        if (typeof value === 'number') return value;
+        const n = parseFloat(String(value));
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    return String(value);
+}
+
+function valueForStorageV2(key, meta, inputValue) {
+    const raw = String(inputValue ?? '').trim();
+    const def = CONFIG_DEFAULT_FILTER_SETTINGS[key];
+    const defaultValue = def ? def.value : '';
+
+    if (raw === '') return defaultValue;
+
+    if (meta.storage === 'ms') return parseInt(raw, 10) || 0;
+    if (meta.storage === 'raw') return raw;
+    if (meta.storage === 'cssUnit') return `${raw}${meta.unitSuffix || ''}`;
+    if (meta.storage === 'number') return parseFloat(raw) || 0;
+
+    return raw;
+}
+
+function collectSettingsFromGridV2() {
+    document.querySelectorAll('.setting-card').forEach(card => {
+        const toggle = card.querySelector('.toggle-active');
+        const key = toggle?.dataset?.key;
+        if (!key || !SETTING_METADATA_V2[key]) return;
+
+        const meta = SETTING_METADATA_V2[key];
+        const input = card.querySelector('.input-value');
+        const value = valueForStorageV2(key, meta, input?.value);
+
+        currentSettings[key] = {
+            isActive: !!toggle.checked,
+            value,
+        };
+    });
+}
+
+function syncSettingsSubtabUI() {
+    if (!UI.settingsSubtabButtons) return;
+    UI.settingsSubtabButtons.forEach(btn => {
+        const isActive = btn.dataset.settingsSubtab === currentSettingsSubtab;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
+function setActiveSettingsSubtabV2(next) {
+    const nextTab = next === 'text' || next === 'delay' ? next : 'media';
+    if (currentSettingsSubtab === nextTab) return;
+
+    collectSettingsFromGridV2();
+    currentSettingsSubtab = nextTab;
+    syncSettingsSubtabUI();
+    displaySettingsV2();
+}
+
+function displaySettingsV2() {
+    if (!UI.settingsGrid) return;
+    UI.settingsGrid.innerHTML = '';
+
+    const entries = Object.entries(SETTING_METADATA_V2)
+        .filter(([, meta]) => meta.category === currentSettingsSubtab)
+        .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
+
+    entries.forEach(([key, meta]) => {
+        const setting = currentSettings[key] || CONFIG_DEFAULT_FILTER_SETTINGS[key] || { isActive: false, value: '' };
+        const inputValue = valueForInputV2(meta, setting.value);
+
+        const card = document.createElement('div');
+        card.className = 'setting-card';
+        card.innerHTML = `
+            <div class="setting-header">
+                <label for="setting-${key}">${meta.label}</label>
+                <label class="switch">
+                    <input type="checkbox" class="toggle-active" data-key="${key}" ${setting.isActive ? 'checked' : ''}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <input id="setting-${key}" class="input-value" type="${meta.type === 'number' ? 'number' : 'text'}"
+                    value="${String(inputValue).replace(/\"/g, '&quot;')}"
+                    placeholder="${meta.placeholder || ''}"
+                    ${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}
+                    style="flex-grow: 1;">
+                <span style="margin-left: 10px; color: var(--text-muted);">${meta.unit || ''}</span>
+            </div>
+        `;
+        UI.settingsGrid.appendChild(card);
+    });
+}
+
 function initScheduleSlider() {
     if (!UI.trackWrapper) return;
 
@@ -587,6 +743,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. 탭 전환
     UI.tabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            const prevTabId = document.querySelector('.nav-btn.active')?.dataset?.tab;
+            if (prevTabId === 'settings') collectSettingsFromGridV2();
             UI.tabs.forEach(t => t.classList.remove('active'));
             UI.contents.forEach(c => c.classList.remove('active'));
             
@@ -666,7 +824,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 6. Settings 저장
+    if (UI.settingsSubtabButtons) {
+        UI.settingsSubtabButtons.forEach(btn => {
+            btn.addEventListener('click', () => setActiveSettingsSubtabV2(btn.dataset.settingsSubtab));
+        });
+        syncSettingsSubtabUI();
+    }
+
     UI.saveSettingsBtn.addEventListener('click', () => {
+        collectSettingsFromGridV2();
+        const newSettingsV2 = mergeFilterSettings(currentSettings);
+
+        chrome.storage.local.set({ filterSettings: newSettingsV2 }, () => {
+            UI.saveStatus.textContent = '설정 저장 완료!';
+            setTimeout(() => UI.saveStatus.textContent = '', 2000);
+            chrome.runtime.sendMessage({ action: "SETTINGS_UPDATED" });
+            currentSettings = newSettingsV2;
+        });
+        return;
+
         const newSettings = {};
     document.querySelectorAll('.setting-card').forEach(card => {
         const toggle = card.querySelector('.toggle-active');
