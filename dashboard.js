@@ -37,24 +37,110 @@ const SETTING_METADATA = {
 
 const SETTING_METADATA_V2 = {
     // Media filters
-    blur: { label: "블러", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "media", order: 10, placeholder: "1.5", min: "0", step: "0.1" },
-    desaturation: { label: "채도 감소", type: "number", unit: "%", unitSuffix: "%", storage: "cssUnit", category: "media", order: 20, placeholder: "50", min: "0", step: "5" },
-    mediaBrightness: { label: "밝기", type: "number", unit: "%", unitSuffix: "%", storage: "cssUnit", category: "media", order: 30, placeholder: "90", min: "0", step: "5" },
-    mediaOpacity: { label: "투명도", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "media", order: 40, placeholder: "0.9", min: "0.05", step: "0.05" },
+    blur: { label: "블러", control: "range", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "media", order: 10, placeholder: "1.5", min: "0", max: "5", step: "0.1" },
+    desaturation: { label: "채도 감소", control: "range", type: "number", unit: "%", unitSuffix: "%", storage: "cssUnit", category: "media", order: 20, placeholder: "50", min: "0", max: "100", step: "1" },
+    mediaBrightness: {
+        label: "밝기",
+        control: "range",
+        type: "number",
+        unit: "%",
+        unitSuffix: "%",
+        storage: "cssUnit",
+        category: "media",
+        order: 30,
+        placeholder: "0",
+        min: "0",
+        max: "100",
+        step: "1",
+        fromStorage: (storedValue) => {
+            const s = String(storedValue ?? '100%');
+            const match = s.match(/-?\\d+(\\.\\d+)?/);
+            const brightness = match ? parseFloat(match[0]) : 100;
+            const strength = (100 - brightness) / 0.5;
+            return String(Math.max(0, Math.min(100, Math.round(strength))));
+        },
+        toStorage: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const brightness = 100 - strength * 0.5;
+            return `${Math.round(brightness)}%`;
+        },
+        displayValue: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const brightness = 100 - strength * 0.5;
+            return `${Math.round(brightness)}%`;
+        },
+    },
+    mediaOpacity: {
+        label: "투명도",
+        control: "range",
+        type: "number",
+        unit: "",
+        unitSuffix: "",
+        storage: "numberString",
+        category: "media",
+        order: 40,
+        placeholder: "0",
+        min: "0",
+        max: "100",
+        step: "1",
+        fromStorage: (storedValue) => {
+            const opacity = Math.max(0.15, Math.min(1, parseFloat(String(storedValue ?? '1')) || 1));
+            const strength = ((1 - opacity) / (1 - 0.15)) * 100;
+            return String(Math.max(0, Math.min(100, Math.round(strength))));
+        },
+        toStorage: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const opacity = 1 - (strength / 100) * (1 - 0.15);
+            return opacity.toFixed(2).replace(/\\.0+$/, '').replace(/(\\.\\d*[1-9])0+$/, '$1');
+        },
+        displayValue: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const opacity = 1 - (strength / 100) * (1 - 0.15);
+            return opacity.toFixed(2).replace(/\\.0+$/, '').replace(/(\\.\\d*[1-9])0+$/, '$1');
+        },
+    },
 
     // Text filters
-    letterSpacing: { label: "자간", type: "number", unit: "em", unitSuffix: "em", storage: "cssUnit", category: "text", order: 10, placeholder: "0.1", min: "0", step: "0.01" },
-    lineHeight: { label: "행간", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "text", order: 20, placeholder: "1.45", min: "1", step: "0.05" },
-    textBlur: { label: "텍스트 블러", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "text", order: 30, placeholder: "0.3", min: "0", step: "0.1" },
-    textOpacity: { label: "텍스트 투명도", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "text", order: 40, placeholder: "0.9", min: "0.05", step: "0.05" },
-    textShadow: { label: "텍스트 그림자", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "text", order: 50, placeholder: "예: 0 1px 0 rgba(0,0,0,0.25)" },
-    textShuffle: { label: "셔플(단어)", type: "number", unit: "", unitSuffix: "", storage: "number", category: "text", order: 60, placeholder: "0.15", min: "0", step: "0.05" },
+    letterSpacing: { label: "자간", control: "range", type: "number", unit: "em", unitSuffix: "em", storage: "cssUnit", category: "text", order: 10, placeholder: "0.1", min: "0", max: "0.30", step: "0.01" },
+    lineHeight: { label: "행간", control: "range", type: "number", unit: "", unitSuffix: "", storage: "numberString", category: "text", order: 20, placeholder: "1.45", min: "1", max: "2.20", step: "0.05" },
+    textBlur: { label: "텍스트 블러", control: "range", type: "number", unit: "px", unitSuffix: "px", storage: "cssUnit", category: "text", order: 30, placeholder: "0.3", min: "0", max: "2", step: "0.1" },
+    textOpacity: {
+        label: "텍스트 투명도",
+        control: "range",
+        type: "number",
+        unit: "",
+        unitSuffix: "",
+        storage: "numberString",
+        category: "text",
+        order: 40,
+        placeholder: "0",
+        min: "0",
+        max: "100",
+        step: "1",
+        fromStorage: (storedValue) => {
+            const opacity = Math.max(0.25, Math.min(1, parseFloat(String(storedValue ?? '1')) || 1));
+            const strength = ((1 - opacity) / (1 - 0.25)) * 100;
+            return String(Math.max(0, Math.min(100, Math.round(strength))));
+        },
+        toStorage: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const opacity = 1 - (strength / 100) * (1 - 0.25);
+            return opacity.toFixed(2).replace(/\\.0+$/, '').replace(/(\\.\\d*[1-9])0+$/, '$1');
+        },
+        displayValue: (inputValue) => {
+            const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
+            const opacity = 1 - (strength / 100) * (1 - 0.25);
+            return opacity.toFixed(2).replace(/\\.0+$/, '').replace(/(\\.\\d*[1-9])0+$/, '$1');
+        },
+    },
+    textShadow: { label: "텍스트 그림자", control: "text", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "text", order: 50, placeholder: "예: 0 1px 0 rgba(0,0,0,0.25)" },
+    textShuffle: { label: "셔플(단어)", control: "range", type: "number", unit: "", unitSuffix: "", storage: "number", category: "text", order: 60, placeholder: "0.15", min: "0", max: "1", step: "0.05" },
 
     // Delay filters
-    delay: { label: "반응 지연", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "delay", order: 10, placeholder: "예: 0.5s" },
-    clickDelay: { label: "클릭 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 20, placeholder: "1000", min: "0", step: "100" },
-    scrollFriction: { label: "스크롤 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 30, placeholder: "50", min: "0", step: "10" },
-    inputDelay: { label: "입력 지연", type: "number", unit: "ms", unitSuffix: "", storage: "ms", category: "delay", order: 40, placeholder: "120", min: "0", step: "10" },
+    delay: { label: "반응 지연", control: "range", type: "number", unit: "s", unitSuffix: "s", storage: "secondsCss", category: "delay", order: 10, placeholder: "0.5", min: "0", max: "2.0", step: "0.1" },
+    clickDelay: { label: "클릭 지연", control: "range", type: "number", unit: "ms", unitSuffix: "ms", storage: "ms", category: "delay", order: 20, placeholder: "1000", min: "0", max: "3000", step: "50" },
+    scrollFriction: { label: "스크롤 지연", control: "range", type: "number", unit: "ms", unitSuffix: "ms", storage: "ms", category: "delay", order: 30, placeholder: "50", min: "0", max: "300", step: "10" },
+    inputDelay: { label: "입력 지연", control: "range", type: "number", unit: "ms", unitSuffix: "ms", storage: "ms", category: "delay", order: 40, placeholder: "120", min: "0", max: "500", step: "10" },
 };
 
 function mergeFilterSettings(partial) {
@@ -220,6 +306,10 @@ function initDOMReferences() {
     UI.settingsSubtabButtons = document.querySelectorAll('.settings-subtab-btn');
     UI.saveSettingsBtn = document.getElementById('saveSettingsBtn');
     UI.saveStatus = document.getElementById('saveStatus');
+    UI.settingsPreview = document.getElementById('settingsPreview');
+    UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
+    UI.previewBefore = document.getElementById('previewBefore');
+    UI.previewAfter = document.getElementById('previewAfter');
 
     // Schedule 탭
     UI.scheduleContainer = document.getElementById('time-slider-container');
@@ -545,6 +635,10 @@ function displaySettings() {
 function valueForInputV2(meta, storedValue) {
     const value = storedValue ?? '';
 
+    if (typeof meta?.fromStorage === 'function') {
+        return meta.fromStorage(value);
+    }
+
     if (meta.storage === 'ms') {
         if (typeof value === 'number') return value;
         const n = parseInt(String(value), 10);
@@ -552,6 +646,14 @@ function valueForInputV2(meta, storedValue) {
     }
 
     if (meta.storage === 'raw') return String(value);
+
+    if (meta.storage === 'secondsCss') {
+        if (typeof value === 'number') return value;
+        const s = String(value);
+        const match = s.match(/-?\\d+(\\.\\d+)?/);
+        const n = match ? parseFloat(match[0]) : 0;
+        return Number.isFinite(n) ? n : 0;
+    }
 
     if (meta.storage === 'cssUnit') {
         const s = String(value);
@@ -576,12 +678,162 @@ function valueForStorageV2(key, meta, inputValue) {
 
     if (raw === '') return defaultValue;
 
+    if (typeof meta?.toStorage === 'function') {
+        return meta.toStorage(raw);
+    }
+
     if (meta.storage === 'ms') return parseInt(raw, 10) || 0;
     if (meta.storage === 'raw') return raw;
+    if (meta.storage === 'secondsCss') {
+        const n = parseFloat(raw);
+        const seconds = Number.isFinite(n) ? Math.max(0, n) : 0;
+        return `${seconds}s`;
+    }
     if (meta.storage === 'cssUnit') return `${raw}${meta.unitSuffix || ''}`;
     if (meta.storage === 'number') return parseFloat(raw) || 0;
 
     return raw;
+}
+
+const SETTINGS_PREVIEW_MEDIA_SRC = 'images/media-sample.gif';
+const SETTINGS_PREVIEW_TEXT = '어제보다 더 나은 오늘을 만들자. 작은 설정 하나가 체감의 대부분을 바꾼다.';
+
+function formatSettingDisplayValueV2(key, meta, inputValue) {
+    if (typeof meta?.displayValue === 'function') return String(meta.displayValue(inputValue));
+
+    const raw = String(inputValue ?? '').trim();
+    if (meta.storage === 'ms') return `${parseInt(raw || '0', 10) || 0}${meta.unitSuffix || 'ms'}`;
+    if (meta.storage === 'secondsCss') return `${parseFloat(raw || '0') || 0}${meta.unitSuffix || 's'}`;
+    if (meta.storage === 'cssUnit') return `${raw}${meta.unitSuffix || ''}`;
+    if (meta.storage === 'number') return `${parseFloat(raw || '0') || 0}`;
+
+    if (meta.unitSuffix) return `${raw}${meta.unitSuffix}`;
+    return raw;
+}
+
+function syncSettingCardUIV2(card) {
+    if (!card) return;
+    const toggle = card.querySelector('.toggle-active');
+    const key = toggle?.dataset?.key;
+    if (!key || !SETTING_METADATA_V2[key]) return;
+
+    const input = card.querySelector('.input-value');
+    const output = card.querySelector('.setting-output');
+    const meta = SETTING_METADATA_V2[key];
+
+    const isActive = !!toggle.checked;
+    if (input) input.disabled = !isActive;
+    card.classList.toggle('is-disabled', !isActive);
+
+    if (output) {
+        if (meta.control === 'range') {
+            output.textContent = formatSettingDisplayValueV2(key, meta, input?.value);
+        } else {
+            output.textContent = meta.unitSuffix || meta.unit || '';
+        }
+    }
+}
+
+function hashToUint32(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+function seededShuffleWords(text, seedStr) {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    let seed = hashToUint32(seedStr);
+    const rand = () => {
+        seed ^= seed << 13;
+        seed ^= seed >>> 17;
+        seed ^= seed << 5;
+        return (seed >>> 0) / 4294967296;
+    };
+
+    for (let i = words.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [words[i], words[j]] = [words[j], words[i]];
+    }
+
+    return words.join(' ');
+}
+
+function renderSettingsPreviewV2() {
+    if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
+
+    const settings = mergeFilterSettings(currentSettings);
+
+    const clearFrames = () => {
+        UI.previewBefore.innerHTML = '';
+        UI.previewAfter.innerHTML = '';
+    };
+
+    if (currentSettingsSubtab === 'media') {
+        if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 미디어 필터가 적용된 결과입니다.';
+        clearFrames();
+        const beforeImg = document.createElement('img');
+        beforeImg.className = 'preview-media';
+        beforeImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+        beforeImg.alt = '미디어 예시 (원본)';
+
+        const afterImg = document.createElement('img');
+        afterImg.className = 'preview-media';
+        afterImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+        afterImg.alt = '미디어 예시 (적용)';
+
+        UI.previewBefore.appendChild(beforeImg);
+        UI.previewAfter.appendChild(afterImg);
+
+        const filters = [];
+        if (settings.blur?.isActive) filters.push(`blur(${settings.blur.value})`);
+        if (settings.desaturation?.isActive) filters.push(`grayscale(${settings.desaturation.value})`);
+        if (settings.mediaBrightness?.isActive) filters.push(`brightness(${settings.mediaBrightness.value})`);
+
+        afterImg.style.filter = filters.length ? filters.join(' ') : 'none';
+        afterImg.style.opacity = settings.mediaOpacity?.isActive ? String(settings.mediaOpacity.value) : '1';
+        return;
+    }
+
+    if (currentSettingsSubtab === 'text') {
+        if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 텍스트 필터가 적용된 결과입니다.';
+        clearFrames();
+
+        const before = document.createElement('div');
+        before.className = 'preview-text';
+        before.textContent = SETTINGS_PREVIEW_TEXT;
+
+        const after = document.createElement('div');
+        after.className = 'preview-text';
+
+        const shuffled = settings.textShuffle?.isActive
+            ? seededShuffleWords(SETTINGS_PREVIEW_TEXT, `friction-preview-${settings.textShuffle.value}`)
+            : SETTINGS_PREVIEW_TEXT;
+        after.textContent = shuffled;
+
+        if (settings.letterSpacing?.isActive) after.style.letterSpacing = String(settings.letterSpacing.value);
+        if (settings.lineHeight?.isActive) after.style.lineHeight = String(settings.lineHeight.value);
+        if (settings.textOpacity?.isActive) after.style.opacity = String(settings.textOpacity.value);
+        if (settings.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
+        if (settings.textBlur?.isActive) after.style.filter = `blur(${settings.textBlur.value})`;
+
+        UI.previewBefore.appendChild(before);
+        UI.previewAfter.appendChild(after);
+        return;
+    }
+
+    if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '지연 필터는 예시 미리보기가 없습니다.';
+    clearFrames();
+    const placeholderBefore = document.createElement('div');
+    placeholderBefore.className = 'preview-placeholder';
+    placeholderBefore.textContent = '예시 없음';
+    const placeholderAfter = document.createElement('div');
+    placeholderAfter.className = 'preview-placeholder';
+    placeholderAfter.textContent = '예시 없음';
+    UI.previewBefore.appendChild(placeholderBefore);
+    UI.previewAfter.appendChild(placeholderAfter);
 }
 
 function collectSettingsFromGridV2() {
@@ -631,28 +883,45 @@ function displaySettingsV2() {
     entries.forEach(([key, meta]) => {
         const setting = currentSettings[key] || CONFIG_DEFAULT_FILTER_SETTINGS[key] || { isActive: false, value: '' };
         const inputValue = valueForInputV2(meta, setting.value);
+        const inputId = `setting-${key}`;
+        const control = meta.control === 'text' ? 'text' : 'range';
+        const isActive = !!setting.isActive;
 
         const card = document.createElement('div');
         card.className = 'setting-card';
+        card.dataset.key = key;
         card.innerHTML = `
             <div class="setting-header">
-                <label for="setting-${key}">${meta.label}</label>
+                <label for="${inputId}">${meta.label}</label>
                 <label class="switch">
-                    <input type="checkbox" class="toggle-active" data-key="${key}" ${setting.isActive ? 'checked' : ''}>
+                    <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
                     <span class="slider"></span>
                 </label>
             </div>
-            <div style="display: flex; align-items: center;">
-                <input id="setting-${key}" class="input-value" type="${meta.type === 'number' ? 'number' : 'text'}"
+            <div class="setting-control">
+                <input
+                    id="${inputId}"
+                    class="input-value ${control === 'range' ? 'input-range' : ''}"
+                    data-key="${key}"
+                    type="${control === 'range' ? 'range' : (meta.type === 'number' ? 'number' : 'text')}"
                     value="${String(inputValue).replace(/\"/g, '&quot;')}"
                     placeholder="${meta.placeholder || ''}"
-                    ${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}
-                    style="flex-grow: 1;">
-                <span style="margin-left: 10px; color: var(--text-muted);">${meta.unit || ''}</span>
+                    ${control === 'range'
+                        ? `${meta.min !== undefined ? `min="${meta.min}"` : ''} ${meta.max !== undefined ? `max="${meta.max}"` : ''} ${meta.step !== undefined ? `step="${meta.step}"` : ''}`
+                        : `${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}`}
+                    ${isActive ? '' : 'disabled'}
+                    style="${control === 'range' ? '' : 'flex-grow: 1;'}"
+                >
+                ${control === 'range'
+                    ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
+                    : `<span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>`}
             </div>
         `;
         UI.settingsGrid.appendChild(card);
+        syncSettingCardUIV2(card);
     });
+
+    renderSettingsPreviewV2();
 }
 
 function initScheduleSlider() {
@@ -829,6 +1098,34 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => setActiveSettingsSubtabV2(btn.dataset.settingsSubtab));
         });
         syncSettingsSubtabUI();
+    }
+
+    if (UI.settingsGrid) {
+        UI.settingsGrid.addEventListener('change', (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLElement)) return;
+            const card = target.closest('.setting-card');
+            if (!card) return;
+
+            if (target.classList.contains('toggle-active')) {
+                syncSettingCardUIV2(card);
+                collectSettingsFromGridV2();
+                renderSettingsPreviewV2();
+            }
+        });
+
+        UI.settingsGrid.addEventListener('input', (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLElement)) return;
+            const card = target.closest('.setting-card');
+            if (!card) return;
+
+            if (target.classList.contains('input-value')) {
+                syncSettingCardUIV2(card);
+                collectSettingsFromGridV2();
+                renderSettingsPreviewV2();
+            }
+        });
     }
 
     UI.saveSettingsBtn.addEventListener('click', () => {
