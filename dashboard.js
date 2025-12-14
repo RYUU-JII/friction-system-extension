@@ -2,6 +2,7 @@
 
 import { CONFIG_DEFAULT_FILTER_SETTINGS } from './config.js';
 import * as dataManager from './dataManager.js';
+import { loadTextContent } from './utils/fileLoader.js';
 
 // ===========================================================
 // 1. 전역 상태 변수
@@ -695,8 +696,14 @@ function valueForStorageV2(key, meta, inputValue) {
     return raw;
 }
 
-const SETTINGS_PREVIEW_MEDIA_SRC = 'images/media-sample.gif';
-const SETTINGS_PREVIEW_TEXT = '어제보다 더 나은 오늘을 만들자. 작은 설정 하나가 체감의 대부분을 바꾼다.';
+const SETTINGS_PREVIEW_MEDIA_SRC = 'samples/images/media_sample.gif';
+const SETTINGS_PREVIEW_TEXT_PATH = 'samples/texts/text_sample_1.txt';
+const SETTINGS_PREVIEW_TEXT_FALLBACK = '샘플 텍스트를 불러오지 못했습니다.';
+
+let settingsPreviewTextPromise = null;
+let settingsPreviewTextCache = null;
+let settingsPreviewEls = null;
+let settingsPreviewUpdateToken = 0;
 
 function formatSettingDisplayValueV2(key, meta, inputValue) {
     if (typeof meta?.displayValue === 'function') return String(meta.displayValue(inputValue));
@@ -761,7 +768,138 @@ function seededShuffleWords(text, seedStr) {
     return words.join(' ');
 }
 
-function renderSettingsPreviewV2() {
+function ensureSettingsPreviewElementsV2() {
+    if (settingsPreviewEls) return settingsPreviewEls;
+    if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return null;
+
+    UI.previewBefore.innerHTML = '';
+    UI.previewAfter.innerHTML = '';
+
+    const beforeImg = document.createElement('img');
+    beforeImg.className = 'preview-media';
+    beforeImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+    beforeImg.alt = '미디어 예시 (원본)';
+
+    const afterImg = document.createElement('img');
+    afterImg.className = 'preview-media';
+    afterImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+    afterImg.alt = '미디어 예시 (적용)';
+
+    const beforeText = document.createElement('div');
+    beforeText.className = 'preview-text';
+    beforeText.textContent = '샘플 텍스트를 불러오는 중...';
+
+    const afterText = document.createElement('div');
+    afterText.className = 'preview-text';
+    afterText.textContent = '샘플 텍스트를 불러오는 중...';
+
+    const beforePlaceholder = document.createElement('div');
+    beforePlaceholder.className = 'preview-placeholder';
+    beforePlaceholder.textContent = '예시 없음';
+
+    const afterPlaceholder = document.createElement('div');
+    afterPlaceholder.className = 'preview-placeholder';
+    afterPlaceholder.textContent = '예시 없음';
+
+    UI.previewBefore.appendChild(beforeImg);
+    UI.previewBefore.appendChild(beforeText);
+    UI.previewBefore.appendChild(beforePlaceholder);
+
+    UI.previewAfter.appendChild(afterImg);
+    UI.previewAfter.appendChild(afterText);
+    UI.previewAfter.appendChild(afterPlaceholder);
+
+    settingsPreviewEls = {
+        before: { img: beforeImg, text: beforeText, placeholder: beforePlaceholder },
+        after: { img: afterImg, text: afterText, placeholder: afterPlaceholder },
+    };
+
+    return settingsPreviewEls;
+}
+
+function ensureSettingsPreviewTextLoadedV2() {
+    if (settingsPreviewTextCache !== null) return Promise.resolve(settingsPreviewTextCache);
+    if (settingsPreviewTextPromise) return settingsPreviewTextPromise;
+
+    settingsPreviewTextPromise = loadTextContent(SETTINGS_PREVIEW_TEXT_PATH)
+        .then((text) => {
+            const normalized = String(text ?? '').replace(/\r\n/g, '\n');
+            settingsPreviewTextCache = normalized || SETTINGS_PREVIEW_TEXT_FALLBACK;
+            return settingsPreviewTextCache;
+        })
+        .catch(() => {
+            settingsPreviewTextCache = SETTINGS_PREVIEW_TEXT_FALLBACK;
+            return settingsPreviewTextCache;
+        });
+
+    return settingsPreviewTextPromise;
+}
+
+function setPreviewModeV2(mode) {
+    const els = ensureSettingsPreviewElementsV2();
+    if (!els) return;
+
+    const show = (el, shouldShow) => {
+        if (!el) return;
+        el.style.display = shouldShow ? '' : 'none';
+    };
+
+    show(els.before.img, mode === 'media');
+    show(els.after.img, mode === 'media');
+    show(els.before.text, mode === 'text');
+    show(els.after.text, mode === 'text');
+    show(els.before.placeholder, mode === 'none');
+    show(els.after.placeholder, mode === 'none');
+}
+
+function updateSettingsPreviewV2() {
+    const els = ensureSettingsPreviewElementsV2();
+    if (!els) return;
+
+    const settings = mergeFilterSettings(currentSettings);
+    const token = ++settingsPreviewUpdateToken;
+
+    if (currentSettingsSubtab === 'media') {
+        if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 미디어 필터가 적용된 결과입니다.';
+        setPreviewModeV2('media');
+
+        const filters = [];
+        if (settings.blur?.isActive) filters.push(`blur(${settings.blur.value})`);
+        if (settings.desaturation?.isActive) filters.push(`grayscale(${settings.desaturation.value})`);
+        if (settings.mediaBrightness?.isActive) filters.push(`brightness(${settings.mediaBrightness.value})`);
+
+        els.after.img.style.filter = filters.length ? filters.join(' ') : 'none';
+        els.after.img.style.opacity = settings.mediaOpacity?.isActive ? String(settings.mediaOpacity.value) : '1';
+        return;
+    }
+
+    if (currentSettingsSubtab === 'text') {
+        if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 텍스트 필터가 적용된 결과입니다.';
+        setPreviewModeV2('text');
+
+        els.after.text.style.letterSpacing = settings.letterSpacing?.isActive ? String(settings.letterSpacing.value) : '';
+        els.after.text.style.lineHeight = settings.lineHeight?.isActive ? String(settings.lineHeight.value) : '';
+        els.after.text.style.opacity = settings.textOpacity?.isActive ? String(settings.textOpacity.value) : '';
+        els.after.text.style.textShadow = settings.textShadow?.isActive ? String(settings.textShadow.value) : '';
+        els.after.text.style.filter = settings.textBlur?.isActive ? `blur(${settings.textBlur.value})` : '';
+
+        ensureSettingsPreviewTextLoadedV2().then((originalText) => {
+            if (token !== settingsPreviewUpdateToken) return;
+            const latest = mergeFilterSettings(currentSettings);
+
+            els.before.text.textContent = originalText;
+            els.after.text.textContent = latest.textShuffle?.isActive
+                ? seededShuffleWords(originalText, `friction-preview-${latest.textShuffle.value}`)
+                : originalText;
+        });
+        return;
+    }
+
+    if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '지연 필터는 예시 미리보기가 없습니다.';
+    setPreviewModeV2('none');
+}
+
+async function renderSettingsPreviewV2() {
     if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
 
     const settings = mergeFilterSettings(currentSettings);
@@ -801,16 +939,18 @@ function renderSettingsPreviewV2() {
         if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 텍스트 필터가 적용된 결과입니다.';
         clearFrames();
 
+        const originalText = await loadTextContent(SETTINGS_PREVIEW_TEXT_PATH);
+
         const before = document.createElement('div');
         before.className = 'preview-text';
-        before.textContent = SETTINGS_PREVIEW_TEXT;
+        before.textContent = originalText;
 
         const after = document.createElement('div');
         after.className = 'preview-text';
 
         const shuffled = settings.textShuffle?.isActive
-            ? seededShuffleWords(SETTINGS_PREVIEW_TEXT, `friction-preview-${settings.textShuffle.value}`)
-            : SETTINGS_PREVIEW_TEXT;
+            ? seededShuffleWords(originalText, `friction-preview-${settings.textShuffle.value}`)
+            : originalText;
         after.textContent = shuffled;
 
         if (settings.letterSpacing?.isActive) after.style.letterSpacing = String(settings.letterSpacing.value);
@@ -921,7 +1061,7 @@ function displaySettingsV2() {
         syncSettingCardUIV2(card);
     });
 
-    renderSettingsPreviewV2();
+    updateSettingsPreviewV2();
 }
 
 function initScheduleSlider() {
@@ -1110,7 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (target.classList.contains('toggle-active')) {
                 syncSettingCardUIV2(card);
                 collectSettingsFromGridV2();
-                renderSettingsPreviewV2();
+                updateSettingsPreviewV2();
             }
         });
 
@@ -1123,7 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (target.classList.contains('input-value')) {
                 syncSettingCardUIV2(card);
                 collectSettingsFromGridV2();
-                renderSettingsPreviewV2();
+                updateSettingsPreviewV2();
             }
         });
     }
