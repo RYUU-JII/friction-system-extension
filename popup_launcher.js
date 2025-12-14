@@ -1,31 +1,123 @@
-// popup_launcher.js
-document.getElementById('openDashboard').addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
-});
+function getHostname(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
 
-document.getElementById('quickBlock').addEventListener('click', () => {
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-        if (!tabs[0] || !tabs[0].url) return;
-        
-        try {
-            const url = new URL(tabs[0].url);
-            const domain = url.hostname.replace(/^www\./, '');
-            
-            chrome.storage.local.get({blockedUrls: []}, (data) => {
-                const blocked = data.blockedUrls;
-                if (!blocked.includes(domain)) {
-                    blocked.push(domain);
-                    chrome.storage.local.set({blockedUrls: blocked}, () => {
-                        const msg = document.getElementById('msg');
-                        msg.textContent = `${domain} 차단됨!`;
-                        chrome.runtime.sendMessage({ action: "SETTINGS_UPDATED" });
-                    });
-                } else {
-                    document.getElementById('msg').textContent = '이미 차단된 사이트입니다.';
-                }
-            });
-        } catch (e) {
-            document.getElementById('msg').textContent = '유효하지 않은 URL';
-        }
-    });
-});
+function tabsQuery(queryInfo) {
+  return new Promise((resolve) => chrome.tabs.query(queryInfo, resolve));
+}
+
+function storageGet(defaults) {
+  return new Promise((resolve) => chrome.storage.local.get(defaults, resolve));
+}
+
+function storageSet(value) {
+  return new Promise((resolve) => chrome.storage.local.set(value, resolve));
+}
+
+function sendMessage(message) {
+  return new Promise((resolve) => chrome.runtime.sendMessage(message, resolve));
+}
+
+function setMsg(el, text, tone = "muted") {
+  el.textContent = text || "";
+  el.classList.remove("is-success", "is-error");
+  if (tone === "success") el.classList.add("is-success");
+  if (tone === "error") el.classList.add("is-error");
+}
+
+function setBlockedButtonState(button, blocked) {
+  button.classList.toggle("is-blocked", blocked);
+  button.disabled = blocked;
+  button.textContent = blocked ? "차단 중" : "현재 사이트 차단";
+}
+
+function setStatusPill(el, blocked, hostname) {
+  el.classList.remove("is-ok", "is-blocked");
+  if (!hostname) {
+    el.textContent = "차단 불가";
+    return;
+  }
+  if (blocked) {
+    el.classList.add("is-blocked");
+    el.textContent = "차단됨";
+  } else {
+    el.classList.add("is-ok");
+    el.textContent = "차단 가능";
+  }
+}
+
+async function init() {
+  const openDashboardBtn = document.getElementById("openDashboard");
+  const quickBlockBtn = document.getElementById("quickBlock");
+  const msgEl = document.getElementById("msg");
+  const siteDomainEl = document.getElementById("siteDomain");
+  const siteHintEl = document.getElementById("siteHint");
+  const siteStatusEl = document.getElementById("siteStatus");
+  const siteFaviconEl = document.getElementById("siteFavicon");
+
+  openDashboardBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+
+  setMsg(msgEl, "");
+
+  const [tab] = await tabsQuery({ active: true, currentWindow: true });
+  const hostname = tab?.url ? getHostname(tab.url) : null;
+  const favIconUrl = tab?.favIconUrl || "";
+
+  siteDomainEl.textContent = hostname || "지원되지 않는 페이지";
+  siteHintEl.textContent = hostname ? "" : "chrome://, 확장 페이지 등은 차단할 수 없어요.";
+  if (siteFaviconEl) {
+    if (favIconUrl) {
+      siteFaviconEl.src = favIconUrl;
+      siteFaviconEl.style.opacity = "1";
+    } else {
+      siteFaviconEl.removeAttribute("src");
+      siteFaviconEl.style.opacity = "0";
+    }
+  }
+
+  const { blockedUrls } = await storageGet({ blockedUrls: [] });
+  const isBlocked = !!hostname && blockedUrls.includes(hostname);
+
+  setStatusPill(siteStatusEl, isBlocked, hostname);
+  setBlockedButtonState(quickBlockBtn, isBlocked || !hostname);
+
+  if (!hostname) {
+    setMsg(msgEl, "현재 페이지는 차단할 수 없어요.", "error");
+    return;
+  }
+
+  if (isBlocked) {
+    setMsg(msgEl, "", "muted");
+    return;
+  }
+
+  quickBlockBtn.addEventListener("click", async () => {
+    try {
+      const latest = await storageGet({ blockedUrls: [] });
+      const next = Array.isArray(latest.blockedUrls) ? [...latest.blockedUrls] : [];
+      if (next.includes(hostname)) {
+        setMsg(msgEl, "이미 차단된 사이트야.", "muted");
+        setBlockedButtonState(quickBlockBtn, true);
+        setStatusPill(siteStatusEl, true, hostname);
+        return;
+      }
+
+      next.push(hostname);
+      await storageSet({ blockedUrls: next });
+      await sendMessage({ action: "SETTINGS_UPDATED" });
+
+      setMsg(msgEl, `${hostname} 차단 완료`, "success");
+      setBlockedButtonState(quickBlockBtn, true);
+      setStatusPill(siteStatusEl, true, hostname);
+    } catch {
+      setMsg(msgEl, "차단 처리 중 오류가 발생했어.", "error");
+    }
+  });
+}
+
+init();

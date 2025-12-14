@@ -1,27 +1,42 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { width: 250px; padding: 15px; font-family: sans-serif; text-align: center; }
-        h3 { margin-top: 0; }
-        button { 
-            width: 100%; padding: 12px; background: #3498db; color: white; 
-            border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-bottom: 10px;
-        }
-        button:hover { background: #2980b9; }
-        .secondary { background: #ecf0f1; color: #333; }
-        .secondary:hover { background: #bdc3c7; }
-    </style>
-</head>
-<body>
-    <h3>⚡ Friction System</h3>
-    <p style="font-size: 12px; color: #666;">당신의 웹 사용을 관리하세요.</p>
-    
-    <button id="openDashboard">📊 대시보드 열기</button>
-    <button id="quickBlock" class="secondary">🚫 현재 사이트 차단</button>
-    <div id="msg" style="font-size:11px; color:green; height:15px;"></div>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Friction</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="popup-header">
+      <div class="popup-brand">
+        <div class="popup-title">Friction</div>
+        <div class="popup-subtitle">현재 사이트를 빠르게 차단</div>
+      </div>
+      <div class="popup-status" id="siteStatus" aria-live="polite">로딩 중…</div>
+    </header>
+
+    <main class="popup-main">
+      <div class="site-card" role="group" aria-label="현재 사이트">
+        <div class="site-identity">
+          <div class="site-icon" aria-hidden="true">
+            <img id="siteFavicon" class="site-favicon" alt="" />
+          </div>
+          <div class="site-meta">
+            <div class="site-label">현재 사이트</div>
+            <div class="site-domain" id="siteDomain">—</div>
+          </div>
+        </div>
+        <div class="site-hint" id="siteHint"></div>
+      </div>
+
+      <div class="btn-stack" role="group" aria-label="동작">
+        <button id="openDashboard" class="btn btn-primary" type="button">대시보드 열기</button>
+        <button id="quickBlock" class="btn btn-secondary" type="button">현재 사이트 차단</button>
+      </div>
+
+      <div id="msg" class="popup-msg" role="status" aria-live="polite"></div>
+    </main>
 
     <script src="popup_launcher.js" type="module"></script>
-</body>
+  </body>
 </html>

@@ -696,14 +696,129 @@ function valueForStorageV2(key, meta, inputValue) {
     return raw;
 }
 
-const SETTINGS_PREVIEW_MEDIA_SRC = 'samples/images/media_sample.gif';
 const SETTINGS_PREVIEW_TEXT_PATH = 'samples/texts/text_sample_1.txt';
 const SETTINGS_PREVIEW_TEXT_FALLBACK = '샘플 텍스트를 불러오지 못했습니다.';
+
+const SETTINGS_PREVIEW_MEDIA_VARIANTS = [
+    {
+        id: 'rat-dance',
+        imageSrc: 'samples/images/rat-dance.gif',
+        soundSrc: 'samples/sounds/rat-dance-music.mp3',
+    },
+    {
+        id: 'vibin-cheese-dance',
+        imageSrc: 'samples/images/vibin-cheese-dance.gif',
+        soundSrc: 'samples/sounds/vibin-cheese-dance-music.mp3',
+    },
+];
+
+let selectedMediaPreviewVariant = null;
 
 let settingsPreviewTextPromise = null;
 let settingsPreviewTextCache = null;
 let settingsPreviewEls = null;
 let settingsPreviewUpdateToken = 0;
+
+let mediaPreviewAudio = null;
+let mediaPreviewFadeRaf = null;
+let mediaPreviewFadeTarget = 0;
+let mediaPreviewFadeStartedAt = 0;
+let mediaPreviewFadeFrom = 0;
+const MEDIA_PREVIEW_FADE_MS = 1000;
+
+function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+}
+
+function pickRandom(arr) {
+    if (!arr || arr.length === 0) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function ensureSelectedMediaPreviewVariant() {
+    if (selectedMediaPreviewVariant) return selectedMediaPreviewVariant;
+    selectedMediaPreviewVariant = pickRandom(SETTINGS_PREVIEW_MEDIA_VARIANTS) || SETTINGS_PREVIEW_MEDIA_VARIANTS[0];
+    return selectedMediaPreviewVariant;
+}
+
+function ensureMediaPreviewAudio() {
+    if (mediaPreviewAudio) return mediaPreviewAudio;
+    const variant = ensureSelectedMediaPreviewVariant();
+
+    const audio = new Audio(variant.soundSrc);
+    audio.preload = 'auto';
+    audio.loop = true;
+    audio.volume = 0;
+    mediaPreviewAudio = audio;
+    return mediaPreviewAudio;
+}
+
+function stopMediaPreviewAudioNow() {
+    if (mediaPreviewFadeRaf) cancelAnimationFrame(mediaPreviewFadeRaf);
+    mediaPreviewFadeRaf = null;
+    mediaPreviewFadeTarget = 0;
+    mediaPreviewFadeStartedAt = 0;
+    mediaPreviewFadeFrom = 0;
+
+    if (!mediaPreviewAudio) return;
+    mediaPreviewAudio.volume = 0;
+    try { mediaPreviewAudio.pause(); } catch (_) {}
+    try { mediaPreviewAudio.currentTime = 0; } catch (_) {}
+}
+
+function fadeMediaPreviewAudioTo(targetVolume, { pauseAtEnd = false } = {}) {
+    const audio = ensureMediaPreviewAudio();
+    const target = clamp01(targetVolume);
+
+    if (mediaPreviewFadeRaf) cancelAnimationFrame(mediaPreviewFadeRaf);
+    mediaPreviewFadeRaf = null;
+
+    mediaPreviewFadeTarget = target;
+    mediaPreviewFadeFrom = clamp01(audio.volume);
+    mediaPreviewFadeStartedAt = performance.now();
+
+    if (target > 0) {
+        audio.play().catch(() => {
+            // Autoplay policy can block play; ignore and try again on next user gesture.
+        });
+    }
+
+    const tick = (now) => {
+        const elapsed = now - mediaPreviewFadeStartedAt;
+        const t = clamp01(elapsed / MEDIA_PREVIEW_FADE_MS);
+        const next = mediaPreviewFadeFrom + (mediaPreviewFadeTarget - mediaPreviewFadeFrom) * t;
+        audio.volume = clamp01(next);
+
+        if (t >= 1) {
+            mediaPreviewFadeRaf = null;
+            if (pauseAtEnd && mediaPreviewFadeTarget <= 0.001) {
+                stopMediaPreviewAudioNow();
+            }
+            return;
+        }
+
+        mediaPreviewFadeRaf = requestAnimationFrame(tick);
+    };
+
+    mediaPreviewFadeRaf = requestAnimationFrame(tick);
+}
+
+function setupMediaPreviewHoverAudio() {
+    if (!UI.settingsPreview) return;
+
+    UI.settingsPreview.addEventListener('mouseenter', () => {
+        if (currentSettingsSubtab !== 'media') return;
+        fadeMediaPreviewAudioTo(1);
+    });
+
+    UI.settingsPreview.addEventListener('mouseleave', () => {
+        fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') stopMediaPreviewAudioNow();
+    });
+}
 
 function formatSettingDisplayValueV2(key, meta, inputValue) {
     if (typeof meta?.displayValue === 'function') return String(meta.displayValue(inputValue));
@@ -815,14 +930,16 @@ function ensureSettingsPreviewElementsV2() {
     UI.previewBefore.innerHTML = '';
     UI.previewAfter.innerHTML = '';
 
+    const variant = ensureSelectedMediaPreviewVariant();
+
     const beforeImg = document.createElement('img');
     beforeImg.className = 'preview-media';
-    beforeImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+    beforeImg.src = variant.imageSrc;
     beforeImg.alt = '미디어 예시 (원본)';
 
     const afterImg = document.createElement('img');
     afterImg.className = 'preview-media';
-    afterImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+    afterImg.src = variant.imageSrc;
     afterImg.alt = '미디어 예시 (적용)';
 
     const beforeText = document.createElement('div');
@@ -952,14 +1069,15 @@ async function renderSettingsPreviewV2() {
     if (currentSettingsSubtab === 'media') {
         if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 미디어 필터가 적용된 결과입니다.';
         clearFrames();
+        const variant = ensureSelectedMediaPreviewVariant();
         const beforeImg = document.createElement('img');
         beforeImg.className = 'preview-media';
-        beforeImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+        beforeImg.src = variant.imageSrc;
         beforeImg.alt = '미디어 예시 (원본)';
 
         const afterImg = document.createElement('img');
         afterImg.className = 'preview-media';
-        afterImg.src = SETTINGS_PREVIEW_MEDIA_SRC;
+        afterImg.src = variant.imageSrc;
         afterImg.alt = '미디어 예시 (적용)';
 
         UI.previewBefore.appendChild(beforeImg);
@@ -1049,6 +1167,7 @@ function setActiveSettingsSubtabV2(next) {
 
     collectSettingsFromGridV2();
     currentSettingsSubtab = nextTab;
+    if (currentSettingsSubtab !== 'media') fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
     syncSettingsSubtabUI();
     displaySettingsV2();
 }
@@ -1178,6 +1297,7 @@ function toggleBlockDomain(domain) {
 
 document.addEventListener('DOMContentLoaded', () => {
     initDOMReferences();
+    setupMediaPreviewHoverAudio();
     
     // 초기 날짜 설정
     if (UI.dailyDate) {
