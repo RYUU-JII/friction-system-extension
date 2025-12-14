@@ -758,8 +758,9 @@ function hashToUint32(str) {
 }
 
 function seededShuffleWords(text, seedStr, strength = 1) {
-    const s = Math.max(0, Math.min(1, Number(strength) || 0));
-    if (s <= 0) return String(text);
+    const rawStrength = Math.max(0, Math.min(1, Number(strength) || 0));
+    if (rawStrength <= 0) return String(text);
+    const s = Math.sqrt(rawStrength);
 
     const parts = String(text).split(/(\s+)/);
     const wordSlots = [];
@@ -787,7 +788,7 @@ function seededShuffleWords(text, seedStr, strength = 1) {
     if (kMax <= 0) return String(text);
     const k = Math.max(1, Math.round(s * kMax));
     const swapChance = Math.min(1, s * 1.2);
-    const passes = s >= 0.85 ? 2 : 1;
+    const passes = rawStrength >= 0.85 ? 2 : 1;
 
     for (let pass = 0; pass < passes; pass++) {
         for (let i = 0; i < words.length; i++) {

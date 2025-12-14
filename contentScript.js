@@ -449,7 +449,10 @@ const TextShuffleManager = {
         if (parent.closest(excludedClosestSelector)) return false;
         if (parent.isContentEditable) return false;
 
-        const strength = this.strength;
+        const rawStrength = this.strength;
+        // Make low values more noticeable without adding extra passes/complexity.
+        // Keeps 0 => 0, but lifts the low end (e.g. 0.1 -> ~0.316).
+        const strength = Math.sqrt(rawStrength);
         const original = node.nodeValue ?? '';
         const trimmed = original.trim();
         if (!trimmed) return false;
@@ -470,7 +473,7 @@ const TextShuffleManager = {
         if (words.length < 4) return false;
         if (words.length > 220) return false;
 
-        // Target selection probability: lower strength touches fewer nodes (CPU-friendly).
+        // Target selection probability (lifted curve): lower values still touch fewer nodes (CPU-friendly).
         if (Math.random() > strength) return false;
 
         this.originalTextByNode.set(node, original);
@@ -480,7 +483,7 @@ const TextShuffleManager = {
         if (kMax <= 0) return false;
         const k = Math.max(1, Math.round(strength * kMax));
         const swapChance = Math.min(1, strength * 1.2);
-        const passes = strength >= 0.85 ? 2 : 1;
+        const passes = rawStrength >= 0.85 ? 2 : 1;
 
         for (let pass = 0; pass < passes; pass++) {
             for (let i = 0; i < words.length; i++) {
