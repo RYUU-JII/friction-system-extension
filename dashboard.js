@@ -364,7 +364,7 @@ function loadDataAndRender() {
 /**
  * 현재 어떤 탭이 활성화되어 있는지 확인하여 해당 UI를 업데이트합니다.
  */
-function renderActiveTab() {
+async function renderActiveTab() {
     const activeTabBtn = document.querySelector('.nav-btn.active');
     if (!activeTabBtn) return;
 
@@ -374,7 +374,7 @@ function renderActiveTab() {
         case 'overview': displayOverview(); break;
         case 'detailed-recap': displayDetailedRecap(); break;
         case 'blocklist': displayBlockList(); break;
-        case 'settings': syncSettingsSubtabUI(); displaySettingsV2(); break;
+        case 'settings': syncSettingsSubtabUI(); await displaySettingsV2(); break;
         case 'schedule': initScheduleSlider(); break;
     }
 }
@@ -852,7 +852,7 @@ function setPreviewModeV2(mode) {
     show(els.after.placeholder, mode === 'none');
 }
 
-function updateSettingsPreviewV2() {
+async function updateSettingsPreviewV2() {
     const els = ensureSettingsPreviewElementsV2();
     if (!els) return;
 
@@ -1012,7 +1012,7 @@ function setActiveSettingsSubtabV2(next) {
     displaySettingsV2();
 }
 
-function displaySettingsV2() {
+async function displaySettingsV2() {
     if (!UI.settingsGrid) return;
     UI.settingsGrid.innerHTML = '';
 
@@ -1061,7 +1061,7 @@ function displaySettingsV2() {
         syncSettingCardUIV2(card);
     });
 
-    updateSettingsPreviewV2();
+    await updateSettingsPreviewV2();
 }
 
 function initScheduleSlider() {
