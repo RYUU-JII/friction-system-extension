@@ -478,7 +478,7 @@ body:not(.dark) .bar-segment + .bar-segment {
 }
 .preview-frame {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 3 / 2;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     overflow: hidden;
@@ -498,7 +498,9 @@ body:not(.dark) .bar-segment + .bar-segment {
     height: 100%;
     padding: 14px;
     display: block;
-    overflow: hidden;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    white-space: pre-wrap;
     color: var(--text-main);
     background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
     font-size: 15px;
