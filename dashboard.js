@@ -135,7 +135,7 @@ const SETTING_METADATA_V2 = {
         },
     },
     textShadow: { label: "텍스트 그림자", control: "text", type: "text", unit: "", unitSuffix: "", storage: "raw", category: "text", order: 50, placeholder: "예: 0 1px 0 rgba(0,0,0,0.25)" },
-    textShuffle: { label: "셔플(단어)", control: "range", type: "number", unit: "", unitSuffix: "", storage: "number", category: "text", order: 60, placeholder: "0.15", min: "0", max: "1", step: "0.05" },
+    textShuffle: { label: "셔플 강도", control: "range", type: "number", unit: "", unitSuffix: "", storage: "number", category: "text", order: 60, placeholder: "0.15", min: "0", max: "1", step: "0.05" },
 
     // Delay filters
     delay: { label: "반응 지연", control: "range", type: "number", unit: "s", unitSuffix: "s", storage: "secondsCss", category: "delay", order: 10, placeholder: "0.5", min: "0", max: "2.0", step: "0.1" },
@@ -718,6 +718,13 @@ function formatSettingDisplayValueV2(key, meta, inputValue) {
     return raw;
 }
 
+function getTextShuffleProbability(settings) {
+    if (!settings?.textShuffle?.isActive) return 0;
+    const raw = Number(settings.textShuffle.value);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    return Math.max(0, Math.min(1, raw));
+}
+
 function syncSettingCardUIV2(card) {
     if (!card) return;
     const toggle = card.querySelector('.toggle-active');
@@ -750,8 +757,24 @@ function hashToUint32(str) {
     return h >>> 0;
 }
 
-function seededShuffleWords(text, seedStr) {
-    const words = String(text).split(/\s+/).filter(Boolean);
+function seededShuffleWords(text, seedStr, strength = 1) {
+    const s = Math.max(0, Math.min(1, Number(strength) || 0));
+    if (s <= 0) return String(text);
+
+    const parts = String(text).split(/(\s+)/);
+    const wordSlots = [];
+    const words = [];
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part) continue;
+        if (/^\s+$/.test(part)) continue;
+        wordSlots.push(i);
+        words.push(part);
+    }
+
+    if (words.length < 2) return String(text);
+
     let seed = hashToUint32(seedStr);
     const rand = () => {
         seed ^= seed << 13;
@@ -760,12 +783,28 @@ function seededShuffleWords(text, seedStr) {
         return (seed >>> 0) / 4294967296;
     };
 
-    for (let i = words.length - 1; i > 0; i--) {
-        const j = Math.floor(rand() * (i + 1));
-        [words[i], words[j]] = [words[j], words[i]];
+    const kMax = Math.min(25, Math.floor(words.length / 2));
+    if (kMax <= 0) return String(text);
+    const k = Math.max(1, Math.round(s * kMax));
+    const swapChance = Math.min(1, s * 1.2);
+    const passes = s >= 0.85 ? 2 : 1;
+
+    for (let pass = 0; pass < passes; pass++) {
+        for (let i = 0; i < words.length; i++) {
+            if (rand() > swapChance) continue;
+            const offset = Math.floor(rand() * (2 * k + 1)) - k;
+            if (offset === 0) continue;
+            const j = Math.max(0, Math.min(words.length - 1, i + offset));
+            if (j === i) continue;
+            [words[i], words[j]] = [words[j], words[i]];
+        }
     }
 
-    return words.join(' ');
+    for (let i = 0; i < wordSlots.length; i++) {
+        parts[wordSlots[i]] = words[i];
+    }
+
+    return parts.join('');
 }
 
 function ensureSettingsPreviewElementsV2() {
@@ -883,13 +922,13 @@ async function updateSettingsPreviewV2() {
         els.after.text.style.textShadow = settings.textShadow?.isActive ? String(settings.textShadow.value) : '';
         els.after.text.style.filter = settings.textBlur?.isActive ? `blur(${settings.textBlur.value})` : '';
 
+        const shuffleProbability = getTextShuffleProbability(settings);
         ensureSettingsPreviewTextLoadedV2().then((originalText) => {
             if (token !== settingsPreviewUpdateToken) return;
-            const latest = mergeFilterSettings(currentSettings);
 
             els.before.text.textContent = originalText;
-            els.after.text.textContent = latest.textShuffle?.isActive
-                ? seededShuffleWords(originalText, `friction-preview-${latest.textShuffle.value}`)
+            els.after.text.textContent = shuffleProbability > 0
+                ? seededShuffleWords(originalText, `friction-preview-${shuffleProbability}`, shuffleProbability)
                 : originalText;
         });
         return;
@@ -948,8 +987,9 @@ async function renderSettingsPreviewV2() {
         const after = document.createElement('div');
         after.className = 'preview-text';
 
-        const shuffled = settings.textShuffle?.isActive
-            ? seededShuffleWords(originalText, `friction-preview-${settings.textShuffle.value}`)
+        const strength = getTextShuffleProbability(settings);
+        const shuffled = strength > 0
+            ? seededShuffleWords(originalText, `friction-preview-${strength}`, strength)
             : originalText;
         after.textContent = shuffled;
 
