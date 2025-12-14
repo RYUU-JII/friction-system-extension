@@ -266,7 +266,7 @@ const TextManager = {
 
 const TextShuffleManager = {
     enabled: false,
-    probability: 0,
+    strength: 0,
     touchedElements: new Set(),
     touchedNodes: new Set(),
     originalTextByNode: new WeakMap(),
@@ -278,16 +278,16 @@ const TextShuffleManager = {
 
     update(setting) {
         const enabled = !!setting?.isActive;
-        const probability = typeof setting?.value === 'number' ? setting.value : Number(setting?.value);
-        const normalizedProbability = Number.isFinite(probability) ? Math.max(0, Math.min(1, probability)) : 0;
+        const strength = typeof setting?.value === 'number' ? setting.value : Number(setting?.value);
+        const normalizedStrength = Number.isFinite(strength) ? Math.max(0, Math.min(1, strength)) : 0;
 
-        if (!enabled || normalizedProbability <= 0) {
+        if (!enabled || normalizedStrength <= 0) {
             this.disable();
             return;
         }
 
         this.enabled = true;
-        this.probability = normalizedProbability;
+        this.strength = normalizedStrength;
         this.maybeShieldInitialPaint();
         this.applyAll();
         this.ensureObserver();
@@ -297,7 +297,7 @@ const TextShuffleManager = {
     disable() {
         if (!this.enabled && this.touchedNodes.size === 0 && this.touchedElements.size === 0) return;
         this.enabled = false;
-        this.probability = 0;
+        this.strength = 0;
         this.pendingSubtrees.clear();
         this.pendingTextNodes.clear();
         this.teardownObserver();
@@ -449,30 +449,54 @@ const TextShuffleManager = {
         if (parent.closest(excludedClosestSelector)) return false;
         if (parent.isContentEditable) return false;
 
+        const strength = this.strength;
         const original = node.nodeValue ?? '';
-        const text = original.trim();
-        if (!text) return false;
-        if (text.length < 8) return false;
-        if (text.length > 2000) return false;
+        const trimmed = original.trim();
+        if (!trimmed) return false;
+        if (trimmed.length < 8) return false;
+        if (trimmed.length > 2000) return false;
 
-        const words = text.split(/\s+/).filter(Boolean);
+        const parts = original.split(/(\s+)/);
+        const wordSlots = [];
+        const words = [];
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (!part) continue;
+            if (/^\s+$/.test(part)) continue;
+            wordSlots.push(i);
+            words.push(part);
+        }
+
         if (words.length < 4) return false;
         if (words.length > 220) return false;
 
-        if (Math.random() > this.probability) return false;
-
-        const leading = original.match(/^\s*/)?.[0] ?? '';
-        const trailing = original.match(/\s*$/)?.[0] ?? '';
+        // Target selection probability: lower strength touches fewer nodes (CPU-friendly).
+        if (Math.random() > strength) return false;
 
         this.originalTextByNode.set(node, original);
         this.touchedNodes.add(node);
 
-        for (let i = words.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [words[i], words[j]] = [words[j], words[i]];
+        const kMax = Math.min(25, Math.floor(words.length / 2));
+        if (kMax <= 0) return false;
+        const k = Math.max(1, Math.round(strength * kMax));
+        const swapChance = Math.min(1, strength * 1.2);
+        const passes = strength >= 0.85 ? 2 : 1;
+
+        for (let pass = 0; pass < passes; pass++) {
+            for (let i = 0; i < words.length; i++) {
+                if (Math.random() > swapChance) continue;
+                const offset = Math.floor(Math.random() * (2 * k + 1)) - k;
+                if (offset === 0) continue;
+                const j = Math.max(0, Math.min(words.length - 1, i + offset));
+                if (j === i) continue;
+                [words[i], words[j]] = [words[j], words[i]];
+            }
         }
 
-        node.nodeValue = leading + words.join(' ') + trailing;
+        for (let i = 0; i < wordSlots.length; i++) {
+            parts[wordSlots[i]] = words[i];
+        }
+        node.nodeValue = parts.join('');
 
         if (parent instanceof HTMLElement) {
             parent.setAttribute('data-friction-shuffled', '1');
