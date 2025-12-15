@@ -13,6 +13,7 @@
 /// ===========================================================
 // 1. Constants & State
 // ===========================================================
+import { isFrictionTime, getHostname } from "./utils/utils";
 
 const STYLES = {
     VISUAL: { ID: 'friction-visual-style', ATTR: 'data-visual-applied' },
@@ -937,33 +938,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   });
 
 // ===========================================================
-// 5. Helpers
-// ===========================================================
-
-function getHostname(url) {
-    try {
-        const u = new URL(url);
-        return u.hostname.replace(/^www\./, '');
-    } catch (e) {
-        return null;
-    }
-}
-
-function checkTimeCondition(schedule) {
-    if (!schedule || !schedule.scheduleActive) return true;
-
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const { startMin, endMin } = schedule;
-    
-    if (startMin < endMin) {
-        return currentMinutes >= startMin && currentMinutes < endMin;
-    } else {
-        return currentMinutes >= startMin || currentMinutes < endMin;
-    }
-}
-
-// ===========================================================
 // 6. Early Filter Application
 // ===========================================================
 
@@ -991,7 +965,7 @@ chrome.storage.local.get({
     const url = window.location.href;
     const hostname = getHostname(url);
     const isBlocked = hostname && items.blockedUrls.includes(hostname);
-    const isTimeActive = checkTimeCondition(items.schedule); 
+    const isTimeActive = isFrictionTime(items.schedule);
 
       if (isBlocked && isTimeActive) {
           const filters = items.filterSettings;

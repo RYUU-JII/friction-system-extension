@@ -1,7 +1,8 @@
 // dashboard.js - Refactored for Stability, Scope Safety, and Modern UI/UX
 
 import { CONFIG_DEFAULT_FILTER_SETTINGS } from './config.js';
-import * as dataManager from './dataManager.js';
+import { getTodayDateStr, formatTime } from './utils/utils.js';
+import { aggregateOverview, getDailyData} from './dataManager.js';
 import { loadTextContent } from './utils/fileLoader.js';
 
 // ===========================================================
@@ -393,7 +394,7 @@ async function renderActiveTab() {
 async function displayOverview() {
     // 1. dataManager로부터 4가지 인사이트 데이터 수집
     const { topUsed, top5Background, top5Increase, top5Decrease } =
-        dataManager.aggregateOverview(currentStats, currentBlockedUrls);
+        aggregateOverview(currentStats, currentBlockedUrls);
 
     const ensureLength = (items, count, makePlaceholder) => {
         const src = Array.isArray(items) ? items.slice(0, count) : [];
@@ -727,7 +728,7 @@ function displayDetailedRecap() {
     if (isDailyMode) {
         document.getElementById('dailyAnalysis').classList.add('active');
         document.getElementById('weeklyAnalysis').classList.remove('active');
-        const selectedDate = UI.dailyDate.value || dataManager.getTodayDateStr();
+        const selectedDate = UI.dailyDate.value || getTodayDateStr();
         renderDailyGraph(selectedDate);
     } else {
         document.getElementById('dailyAnalysis').classList.remove('active');
@@ -737,10 +738,10 @@ function displayDetailedRecap() {
 }
 
 function renderDailyGraph(dateStr) {
-    const { hourly, hourlyBlocked, total, blocked, change } = dataManager.getDailyData(currentStats, dateStr, currentBlockedUrls);
+    const { hourly, hourlyBlocked, total, blocked, change } = getDailyData(currentStats, dateStr, currentBlockedUrls);
 
-    UI.dailyTotal.textContent = dataManager.formatTime(total);
-    UI.dailyBlocked.textContent = dataManager.formatTime(blocked);
+    UI.dailyTotal.textContent = formatTime(total);
+    UI.dailyBlocked.textContent = formatTime(blocked);
     UI.dailyChange.textContent = change.startsWith('-') ? change : `+${change}`;
     UI.dailyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
 
@@ -759,7 +760,7 @@ function renderDailyGraph(dateStr) {
         const safeTime = Math.max(0, time - blockedTime);
         const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
         const safePct = time > 0 ? (safeTime / time) * 100 : 0;
-        const tooltip = `${h}시\n총 ${dataManager.formatTime(time)}\n차단 ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+        const tooltip = `${h}시\n총 ${formatTime(time)}\n차단 ${formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
 
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
@@ -793,10 +794,10 @@ function renderDailyGraph(dateStr) {
 }
 
 function renderWeeklyGraph() {
-    const { weekdayData, weekdayBlocked, total, blocked, change } = dataManager.getWeeklyData(currentStats, currentBlockedUrls);
+    const { weekdayData, weekdayBlocked, total, blocked, change } = getWeeklyData(currentStats, currentBlockedUrls);
 
-    UI.weeklyTotal.textContent = dataManager.formatTime(total);
-    UI.weeklyBlocked.textContent = dataManager.formatTime(blocked);
+    UI.weeklyTotal.textContent = formatTime(total);
+    UI.weeklyBlocked.textContent = formatTime(blocked);
     UI.weeklyChange.textContent = change.startsWith('-') ? change : `+${change}`;
     UI.weeklyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
 
@@ -815,7 +816,7 @@ function renderWeeklyGraph() {
         const safeTime = Math.max(0, time - blockedTime);
         const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
         const safePct = time > 0 ? (safeTime / time) * 100 : 0;
-        const tooltip = `${days[idx]}\n총 ${dataManager.formatTime(time)}\n차단 ${dataManager.formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+        const tooltip = `${days[idx]}\n총 ${formatTime(time)}\n차단 ${formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
 
         const barWrapper = document.createElement('div');
         barWrapper.className = 'bar-wrapper';
@@ -1571,8 +1572,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 초기 날짜 설정
     if (UI.dailyDate) {
-        UI.dailyDate.value = dataManager.getTodayDateStr();
-        UI.dailyDate.max = dataManager.getTodayDateStr();
+        UI.dailyDate.value = getTodayDateStr();
+        UI.dailyDate.max = getTodayDateStr();
     }
 
     loadDataAndRender();
