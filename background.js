@@ -1,4 +1,5 @@
 import { CONFIG_DEFAULT_FILTER_SETTINGS } from './config.js';
+import { isFrictionTime, getLocalDateStr, ensureNumber, getHostname } from './utils/utils.js';
 
 const DEFAULT_FILTER_SETTINGS = CONFIG_DEFAULT_FILTER_SETTINGS;
 
@@ -112,44 +113,11 @@ function pruneOldData() {
 }
 
 // ===========================================================
-// 2. Helpers
-// ===========================================================
-
-function getHostname(url) {
-    try {
-        const u = new URL(url);
-        return u.hostname.replace(/^www\./, '');
-    } catch (e) { return null; }
-}
-
-const ensureNumber = (val) => (typeof val === 'number' && !isNaN(val) ? val : 0);
-
-function checkTimeCondition(schedule) {
-    if (!schedule || !schedule.scheduleActive) return true;
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const { startMin, endMin } = schedule;
-    if (startMin < endMin) {
-        return currentMinutes >= startMin && currentMinutes < endMin;
-    } else {
-        return currentMinutes >= startMin || currentMinutes < endMin;
-    }
-}
-
-function getLocalDateStr(ts = Date.now()) {
-    const d = new Date(ts);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
-// ===========================================================
 // 3. 핵심 로직: 시간 계산
 // ===========================================================
 
 async function calculateTabTime(hostname, now, isActive) {
-    const dateStr = getLocalDateStr(now);
+    const dateStr = getLocalDateStr();
     const hour = new Date(now).getHours();
     
     if (!statsCache.dates[dateStr]) {
@@ -284,7 +252,7 @@ async function sendFrictionMessage(tabId, url) {
     const hostname = getHostname(url);
     const isBlocked = hostname && items.blockedUrls.includes(hostname);
     
-    const isTimeActive = checkTimeCondition(items.schedule);
+    const isTimeActive = isFrictionTime(items.schedule);
     const shouldApplyFilter = isBlocked && isTimeActive;
 
     try {
@@ -309,7 +277,7 @@ async function checkScheduleStatus() {
         schedule: { scheduleActive: false, startMin: 0, endMin: 1440 }
     });
     
-    const isCurrentlyActive = checkTimeCondition(items.schedule);
+    const isCurrentlyActive = isFrictionTime(items.schedule);
     const sessionData = await chrome.storage.session.get('lastScheduleState');
     const lastState = sessionData.lastScheduleState;
 

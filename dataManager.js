@@ -1,25 +1,6 @@
-// dataManager.js (리팩토링된 dashboard.js에 맞춰 함수 조정)
+// dataManager.js
 
-export function formatTime(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) return `${hours}시간 ${String(minutes).padStart(2, '0')}분`;
-    if (minutes > 0) return `${minutes}분 ${String(seconds).padStart(2, '0')}초`;
-    return `${seconds}초`;
-}
-
-export function getTodayDateStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-export function getYesterdayDateStr() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+import { getTodayDateStr, getYesterdayDateStr, formatTime } from './utils/utils.js';
 
 // =======================================================
 // Overview 데이터 집계 (Top N 및 변화량 계산 로직으로 대체)
