@@ -1,0 +1,240 @@
+/* Overview carousel */
+.overview-carousel {
+    max-width: 860px;
+}
+.overview-carousel-track {
+    position: relative;
+    min-height: 660px;
+    transition: height 0.35s ease;
+}
+.overview-slide {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 14px 16px 16px;
+}
+.overview-slide .recap-header {
+    margin: 2px 0 10px;
+}
+.overview-slide .section-desc {
+    margin-top: 4px;
+}
+.js-enabled .overview-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: translateX(34px);
+    pointer-events: none;
+    transition: opacity 0.30s ease, transform 0.38s ease;
+    will-change: opacity, transform;
+}
+.js-enabled .overview-slide.is-active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+.js-enabled .overview-slide.is-prev {
+    opacity: 0;
+    transform: translateX(-34px);
+}
+.js-enabled .overview-slide.is-next {
+    opacity: 0;
+    transform: translateX(34px);
+}
+.js-enabled .overview-slide.is-immediate {
+    transition: none;
+}
+.overview-carousel-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 14px;
+}
+.carousel-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-main);
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    font-size: 20px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+}
+.carousel-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(99, 102, 241, 0.45);
+}
+.carousel-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+.carousel-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 8px;
+}
+.carousel-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.carousel-dot:hover {
+    transform: scale(1.08);
+    border-color: rgba(99, 102, 241, 0.55);
+}
+.carousel-dot.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* Overview / Recap List */
+.recap-mode-toggle {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.recap-mode-toggle button {
+    border: 1px solid var(--border-color); background: transparent; color: var(--text-main); padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;
+}
+.recap-mode-toggle button:hover { background: var(--border-color); }
+.recap-mode-toggle .sort-options button.active {
+    background: var(--accent); color: white; border-color: var(--accent);
+}
+.recap-mode-toggle .sort-options button:not(.active) {
+    background: transparent; border: 1px solid var(--border-color);
+}
+
+.recap-header { margin: 30px 0 10px; }
+.recap-header h3 { color: var(--accent); margin: 0; }
+
+.recap-list { display: flex; flex-direction: column; gap: 15px; }
+.overview-slide .recap-list { gap: 10px; }
+.recap-item {
+    background: var(--card-bg); border-radius: var(--radius-md); padding: 15px; box-shadow: var(--shadow-sm);
+    position: relative; overflow: hidden; border: 1px solid var(--border-color);
+}
+.overview-slide .recap-item {
+    min-height: 68px;
+    padding: 14px 16px;
+}
+.recap-item.is-placeholder {
+    opacity: 0.7;
+    border-style: dashed;
+}
+.recap-item.is-placeholder .usage-bar {
+    display: none;
+}
+.favicon.is-placeholder {
+    background: linear-gradient(135deg, rgba(148, 163, 184, 0.35), rgba(148, 163, 184, 0.12));
+}
+body.dark .favicon.is-placeholder {
+    background: linear-gradient(135deg, rgba(148, 163, 184, 0.24), rgba(148, 163, 184, 0.10));
+}
+.domain-name.is-placeholder,
+.time.is-placeholder,
+.diff-info.is-placeholder {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.overview-slide .recap-item {
+    box-shadow: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+}
+body.dark .overview-slide .recap-item {
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.00));
+}
+.usage-bar {
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    height: 4px;
+    background: var(--usage-bar-bg); 
+    transition: width 0.5s ease;
+    z-index: 1;
+}
+.usage-bar.is-gradient {
+    background: var(--usage-bar-gradient);
+}
+.usage-bar.is-blocked {
+    background: var(--usage-bar-blocked-bg);
+}
+.recap-content {
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    position: relative; 
+    z-index: 2;
+    min-height: 40px;
+}
+.domain-info { 
+    display: flex; 
+    align-items: center; 
+    gap: 18px;
+}
+.favicon { 
+    width: 28px;
+    height: 28px;
+    background-size: contain; 
+    background-repeat: no-repeat; 
+    border-radius: 4px; 
+}
+.domain-name { 
+    font-weight: 600; 
+    color: var(--text-main);
+    font-size: 1.05em;
+}
+.insight { font-size: 0.9em; color: var(--text-muted); }
+.stats-group { 
+    display: flex; 
+    align-items: center; 
+    gap: 24px;
+}
+.time { 
+    font-weight: 700; 
+    font-size: 1.15em;
+}
+
+.text-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.diff-info {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.diff-badge {
+    font-weight: 800;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-variant-numeric: tabular-nums;
+}
+.diff-badge.increase {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-fg);
+    border-color: var(--btn-danger-border);
+}
+.diff-badge.decrease {
+    background: var(--btn-safe-bg);
+    color: var(--btn-safe-fg);
+    border-color: var(--btn-safe-border);
+}
+

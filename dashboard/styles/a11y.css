@@ -1,0 +1,28 @@
+@media (prefers-reduced-motion: reduce) {
+    .js-enabled .reveal-section,
+    .js-enabled .reveal-section.is-visible {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+    .js-enabled .overview-slide,
+    .js-enabled .overview-slide.is-active,
+    .js-enabled .overview-slide.is-prev,
+    .js-enabled .overview-slide.is-next {
+        transition: none;
+        transform: none;
+    }
+}
+
+/* Focus styles */
+.primary-btn:focus-visible,
+.nav-btn:focus-visible,
+.dark-mode-toggle-btn:focus-visible,
+.recap-mode-toggle button:focus-visible,
+.date-input:focus-visible,
+.block-add-panel input:focus-visible,
+.input-value:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
