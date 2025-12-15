@@ -1,0 +1,41 @@
+/* Schedule Slider */
+.schedule-panel { margin-bottom: 20px; }
+.time-slider-container {
+    padding: 40px; background: var(--card-bg); border-radius: var(--radius-lg); 
+    position: relative;
+    opacity: 1; transition: opacity 0.3s;
+}
+.time-display {
+    text-align: center; font-size: 18px; font-weight: 600; color: var(--accent);
+    margin-bottom: 20px; display: flex; justify-content: center; gap: 10px;
+}
+.time-display .separator { color: var(--text-muted); }
+.slider-track-wrapper {
+    position: relative;
+    height: 30px;
+    padding-top: 10px;
+    margin-bottom: 20px;
+}
+.slider-track { background: var(--border-color); height: 10px; border-radius: 10px; position: absolute; top: 10px; left: 0; right: 0; }
+.slider-range { 
+    position: absolute; 
+    top: 10px; 
+    height: 10px; 
+    background: linear-gradient(90deg, var(--accent), var(--accent-gradient-to)); 
+    border-radius: 10px; 
+}
+.slider-handle { 
+    position: absolute;
+    top: 15px;
+    width: 26px; height: 26px; border: 4px solid var(--card-bg); 
+    background: var(--accent);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    cursor: grab;
+    transition: box-shadow 0.2s;
+}
+.slider-handle:hover {
+    box-shadow: 0 0 0 8px var(--accent-ring);
+}
+body.dark .slider-handle { border: 4px solid var(--bg-main); }
+

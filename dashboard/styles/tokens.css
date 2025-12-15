@@ -1,0 +1,94 @@
+:root {
+    /* Color Palette - Light Mode */
+    --bg-main: #f8fafc;
+    --bg-sidebar: #ffffff;
+    --accent: #6366f1; /* Indigo */
+    --accent-hover: #4f46e5;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --card-bg: #ffffff;
+    --border-color: #e2e8f0;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    
+    /* Stats Colors */
+    --color-blocked: #dc2626; /* Red-600 */
+    --color-safe: #059669; /* Emerald-600 */
+
+    /* Semantic button colors */
+    --btn-danger-bg: var(--color-blocked);
+    --btn-danger-hover: #b91c1c; /* Red-700 */
+    --btn-danger-fg: #ffffff;
+    --btn-danger-border: transparent;
+
+    --btn-safe-bg: var(--color-safe);
+    --btn-safe-hover: #047857; /* Emerald-700 */
+    --btn-safe-fg: #ffffff;
+    --btn-safe-border: transparent;
+
+    --btn-neutral-bg: #e2e8f0; /* Slate-200 */
+    --btn-neutral-hover: #cbd5e1; /* Slate-300 */
+    --btn-neutral-fg: #334155; /* Slate-700 */
+    --btn-neutral-border: #cbd5e1;
+
+    /* UI accents */
+    --usage-bar-bg: rgba(99, 102, 241, 0.10);
+    --usage-bar-blocked-bg: rgba(220, 38, 38, 0.12);
+    --usage-bar-gradient: linear-gradient(90deg, rgba(99, 102, 241, 0.20), rgba(139, 92, 246, 0.12));
+    --accent-gradient-to: #8b5cf6; /* Violet-500 */
+    --accent-ring: rgba(99, 102, 241, 0.20);
+
+    /* Charts */
+    --chart-safe: rgba(99, 102, 241, 0.75);
+    --chart-safe-hover: rgba(99, 102, 241, 0.92);
+    --chart-blocked: rgba(220, 38, 38, 0.85);
+    --chart-blocked-hover: rgba(220, 38, 38, 0.95);
+    --chart-grid: rgba(148, 163, 184, 0.25);
+}
+
+body.dark {
+    /* Color Palette - Dark Mode */
+    --bg-main: #0f172a;
+    --bg-sidebar: #1e293b;
+    --accent: #818cf8; /* Lighter Indigo */
+    --accent-hover: #6366f1;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --card-bg: #1e293b;
+    --border-color: #334155;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+    --color-blocked: #f43f5e; /* Rose-500 */
+    --color-safe: #10b981; /* Emerald-500 */
+
+    /* Dark mode: keep meaning but reduce saturation via tinted buttons */
+    --btn-danger-bg: rgba(244, 63, 94, 0.18);
+    --btn-danger-hover: rgba(244, 63, 94, 0.26);
+    --btn-danger-fg: #fecdd3; /* Rose-200 */
+    --btn-danger-border: rgba(244, 63, 94, 0.35);
+
+    --btn-safe-bg: rgba(16, 185, 129, 0.16);
+    --btn-safe-hover: rgba(16, 185, 129, 0.24);
+    --btn-safe-fg: #a7f3d0; /* Emerald-200 */
+    --btn-safe-border: rgba(16, 185, 129, 0.32);
+
+    --btn-neutral-bg: rgba(148, 163, 184, 0.16);
+    --btn-neutral-hover: rgba(148, 163, 184, 0.24);
+    --btn-neutral-fg: #e2e8f0; /* Slate-200 */
+    --btn-neutral-border: rgba(148, 163, 184, 0.28);
+
+    --usage-bar-bg: rgba(129, 140, 248, 0.14);
+    --usage-bar-blocked-bg: rgba(244, 63, 94, 0.18);
+    --usage-bar-gradient: linear-gradient(90deg, rgba(129, 140, 248, 0.22), rgba(139, 92, 246, 0.14));
+    --accent-gradient-to: rgba(139, 92, 246, 0.85);
+    --accent-ring: rgba(129, 140, 248, 0.22);
+
+    --chart-safe: rgba(129, 140, 248, 0.55);
+    --chart-safe-hover: rgba(129, 140, 248, 0.72);
+    --chart-blocked: rgba(244, 63, 94, 0.65);
+    --chart-blocked-hover: rgba(244, 63, 94, 0.82);
+    --chart-grid: rgba(148, 163, 184, 0.18);
+}
+
