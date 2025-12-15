@@ -1,4 +1,10 @@
-// timeUtils.js
+// utils/utils.js
+//
+// 이 파일은 ES Module( import/export )로 사용하는 공용 유틸입니다.
+// - 사용처: background.js(서비스워커), dashboard.js/dataManager.js(옵션 페이지)
+//
+// 주의: MV3 content script는 ES Module이 아니어서 여기의 export를 직접 import할 수 없습니다.
+//       content script용 최소 유틸은 `utils/contentUtils.js`(일반 스크립트)로 별도 제공 중입니다.
 
 /**
  * 유효한 숫자인지 확인하는 헬퍼 함수
@@ -95,4 +101,3 @@ export function getHostname(url) {
     return null;
   }
 }
-

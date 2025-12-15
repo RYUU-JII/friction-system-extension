@@ -13,7 +13,8 @@
 /// ===========================================================
 // 1. Constants & State
 // ===========================================================
-import { isFrictionTime, getHostname } from "./utils/utils";
+// NOTE: Content scripts are not ES modules in MV3.
+// Helpers are provided via `utils/contentUtils.js` (loaded before this file by `manifest.json`).
 
 const STYLES = {
     VISUAL: { ID: 'friction-visual-style', ATTR: 'data-visual-applied' },
