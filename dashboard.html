@@ -30,24 +30,50 @@
       <section id="overview" class="tab-content active">
         <header>
           <h1>사용 개요</h1>
-          <p>오늘 가장 많은 시간을 보낸 사이트를 확인하고, 필요하면 차단 목록에 추가해 보세요.</p>
+          <p>오늘의 활동 패턴과 어제 대비 변화를 한눈에 확인하세요.</p>
         </header>
 
-        <div class="card" style="padding: 10px 24px">
-          <div class="recap-mode-toggle">
-            <button id="toggleRecapMode">백그라운드 보기</button>
-            <div class="sort-options">
-              <button id="sortByTime" class="active">시간 순</button>
-              <button id="sortByVisits">방문 순</button>
-            </div>
+        <div class="overview-carousel" id="overviewCarousel" aria-roledescription="carousel" aria-label="사용 개요 카드">
+          <div class="overview-carousel-track" id="overviewCarouselTrack">
+            <article class="overview-slide" data-slide-title="오늘 많이 사용" aria-label="오늘 많이 사용">
+              <div class="recap-header">
+                <h3>🏆 오늘 가장 많이 사용한 사이트 (Top 5)</h3>
+                <p class="section-desc">포그라운드(활성 탭) 사용 시간 기준입니다.</p>
+              </div>
+              <div class="recap-list" id="topUsedList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="백그라운드" aria-label="백그라운드">
+              <div class="recap-header">
+                <h3 style="color: var(--accent);">🕶️ 백그라운드 체류 (Top 5)</h3>
+                <p class="section-desc">탭은 열려있지만 활성화되지 않았던 체류 시간입니다.</p>
+              </div>
+              <div class="recap-list" id="backgroundList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="증가" aria-label="증가">
+              <div class="recap-header">
+                <h3 style="color: var(--color-blocked);">🔥 어제보다 더 많이 사용했어요 (Top 5)</h3>
+                <p class="section-desc">포그라운드 기준으로 사용 시간이 늘어난 사이트입니다.</p>
+              </div>
+              <div class="recap-list" id="increaseList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="감소" aria-label="감소">
+              <div class="recap-header">
+                <h3 style="color: var(--color-safe);">✅ 집중력을 잘 유지하고 있어요 (Top 5)</h3>
+                <p class="section-desc">포그라운드 기준으로 사용 시간이 줄어든 사이트입니다.</p>
+              </div>
+              <div class="recap-list" id="decreaseList"></div>
+            </article>
+          </div>
+
+          <div class="overview-carousel-controls" aria-label="개요 카드 이동">
+            <button type="button" class="carousel-btn" id="overviewPrev" aria-label="이전 카드">‹</button>
+            <div class="carousel-dots" id="overviewDots" role="tablist" aria-label="개요 카드 목록"></div>
+            <button type="button" class="carousel-btn" id="overviewNext" aria-label="다음 카드">›</button>
           </div>
         </div>
-
-        <div class="recap-header">
-          <h3 id="recapModeTitle">백그라운드(Active) 시간</h3>
-        </div>
-
-        <div class="recap-list" id="recapList"></div>
       </section>
 
       <section id="detailed-recap" class="tab-content">

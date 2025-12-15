@@ -22,35 +22,116 @@ export function getYesterdayDateStr() {
 }
 
 // =======================================================
-// Overview 데이터 집계 (dashboard.js에서 이관)
+// Overview 데이터 집계 (Top N 및 변화량 계산 로직으로 대체)
+// 이 함수는 Top 10, Top 5 증가, Top 5 감소 리스트를 반환합니다.
 // =======================================================
 
 export function aggregateOverview(stats, blockedUrls) {
-    const today = getTodayDateStr();
-    const yesterday = getYesterdayDateStr();
+    const todayStr = getTodayDateStr();
+    const yesterdayStr = getYesterdayDateStr();
     
-    const statsByDomain = {};
+    // 특정 날짜의 도메인별 시간 데이터를 모두 계산하는 헬퍼 함수
+    const getAllTimeData = (dateStr) => {
+        const data = {};
+        if (stats.dates[dateStr]) {
+            Object.entries(stats.dates[dateStr].domains).forEach(([domain, domainData]) => {
+                data[domain] = {
+                    activeTime: (domainData.active || 0),
+                    backgroundTime: (domainData.background || 0)
+                };
+            });
+        }
+        return data;
+    };
 
-    [today, yesterday].forEach(date => {
-        if (stats.dates[date]) {
-            Object.entries(stats.dates[date].domains).forEach(([domain, data]) => {
-                if (!statsByDomain[domain]) {
-                    statsByDomain[domain] = { active: 0, background: 0, visits: 0 };
-                }
-                statsByDomain[domain].active += data.active || 0;
-                statsByDomain[domain].background += data.background || 0;
-                statsByDomain[domain].visits += data.visits || 0;
+    const todayData = getAllTimeData(todayStr);
+    const yesterdayData = getAllTimeData(yesterdayStr);
+    
+    const allDomains = new Set([
+        ...Object.keys(todayData), 
+        ...Object.keys(yesterdayData)
+    ]);
+
+    const changeData = [];
+    const todayForegroundRecap = []; // 포그라운드(활성 탭) 기준
+    const todayBackgroundRecap = []; // 백그라운드 사용 시간 기준 (NEW)
+
+    allDomains.forEach(domain => {
+        const todayActiveTime = todayData[domain]?.activeTime || 0;
+        const yesterdayActiveTime = yesterdayData[domain]?.activeTime || 0;
+        const todayBgTime = todayData[domain]?.backgroundTime || 0; // 백그라운드 시간
+        const diff = todayActiveTime - yesterdayActiveTime;
+        const isBlocked = blockedUrls.includes(domain);
+
+        // 1. 포그라운드 사용 시간 Recap (Top 5 Today)
+        if (todayActiveTime > 0) {
+            todayForegroundRecap.push({
+                domain,
+                totalTime: todayActiveTime,
+                isBlocked
+            });
+        }
+
+        // 2. 백그라운드 시간 Recap (Top 5 Background)
+        if (todayBgTime > 0) {
+            todayBackgroundRecap.push({
+                domain,
+                totalTime: todayBgTime, // 필드명은 totalTime으로 통일하여 재활용
+                isBlocked
+            });
+        }
+        
+        // 3. 변화량 Recap (Top 5 Increase/Decrease, 포그라운드 기준)
+        if (todayActiveTime > 0 || yesterdayActiveTime > 0) {
+            changeData.push({
+                domain,
+                diff, 
+                todayTime: todayActiveTime,
+                yesterdayTime: yesterdayActiveTime,
+                isBlocked
             });
         }
     });
 
-    return Object.entries(statsByDomain).map(([domain, data]) => ({
-        domain,
-        active: data.active,
-        background: data.background,
-        visits: data.visits,
-        isBlocked: blockedUrls.includes(domain)
+    // 1. Top 5 Foreground (Today)
+    todayForegroundRecap.sort((a, b) => b.totalTime - a.totalTime);
+    const topUsed = todayForegroundRecap.slice(0, 5).map(item => ({
+        ...item,
+        timeStr: formatTime(item.totalTime)
     }));
+
+    // 2. Top 5 Background
+    todayBackgroundRecap.sort((a, b) => b.totalTime - a.totalTime);
+    const top5Background = todayBackgroundRecap.slice(0, 5).map(item => ({
+        ...item,
+        timeStr: formatTime(item.totalTime)
+    }));
+
+    // 2. Top 5 Increase (diff가 양수인 것 중 상위 5개)
+    changeData.sort((a, b) => b.diff - a.diff);
+    const top5Increase = changeData.filter(item => item.diff > 0).slice(0, 5).map(item => ({
+        ...item,
+        diffStr: formatTime(item.diff), // '시간' 형태로 포맷
+        todayStr: formatTime(item.todayTime),
+        yesterdayStr: formatTime(item.yesterdayTime)
+    }));
+    
+    // 3. Top 5 Decrease (diff가 음수인 것 중 하위 5개)
+    changeData.sort((a, b) => a.diff - b.diff);
+    const top5Decrease = changeData.filter(item => item.diff < 0).slice(0, 5).map(item => ({
+        ...item,
+        // 음수이므로 Math.abs 처리 후 '-' 기호 추가
+        diffStr: `-${formatTime(Math.abs(item.diff))}`, 
+        todayStr: formatTime(item.todayTime),
+        yesterdayStr: formatTime(item.yesterdayTime)
+    }));
+
+    return {
+        topUsed,
+        top5Background,
+        top5Increase,
+        top5Decrease,
+    };
 }
 
 
@@ -91,7 +172,7 @@ export function getDailyData(stats, dateStr, blockedUrls) {
     const changeStr = diff > 0 ? `+${change}` : (diff < 0 ? `-${change}` : '0초');
 
 
-    return { hourly, hourlyBlocked, total, blocked, change: changeStr };
+    return { hourly, hourlyBlocked, total, blocked, change: changeStr, dateStr };
 }
 
 export function getWeeklyData(stats, blockedUrls) {
