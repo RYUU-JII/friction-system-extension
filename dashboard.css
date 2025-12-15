@@ -753,9 +753,18 @@ body:not(.dark) .bar-segment + .bar-segment {
 .preview-media {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    object-position: 50% 85%;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    background: var(--bg-main);
+}
+.preview-image,
+.preview-video {
+    width: 100%;
+    height: 100%;
     display: block;
+    object-fit: contain;
+    object-position: center;
 }
 .preview-text {
     width: 100%;
