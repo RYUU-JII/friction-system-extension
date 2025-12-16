@@ -88,11 +88,11 @@
               <button id="toggleDaily" class="active">일간 분석</button>
               <button id="toggleWeekly">주간 분석</button>
             </div>
+            <input type="date" id="dailyDate" class="date-input is-inline" />
           </div>
         </div>
 
         <div class="detailed-analysis active" id="dailyAnalysis">
-          <input type="date" id="dailyDate" class="date-input" />
           <div class="summary-cards">
             <div class="summary-card">총 사용 시간: <span id="dailyTotal">0초</span></div>
             <div class="summary-card">차단 시간: <span id="dailyBlocked">0초</span></div>
@@ -107,6 +107,14 @@
           </div>
           <div class="graph-container" id="dailyGraph"></div>
           <div class="graph-label">시간 (0h - 23h)</div>
+
+          <div class="reveal-section is-visible" style="margin-top: 16px">
+            <div class="recap-header">
+              <h3 style="margin: 0">사이트별 누적 사용시간</h3>
+              <p class="section-desc">선택한 날짜의 포그라운드 누적시간을 전체 사이트로 표시합니다.</p>
+            </div>
+            <div class="recap-list" id="dailyAllSitesList"></div>
+          </div>
         </div>
 
         <div class="detailed-analysis" id="weeklyAnalysis">
@@ -123,7 +131,15 @@
             <div class="chart-insight" id="weeklyInsight"></div>
           </div>
           <div class="graph-container" id="weeklyGraph"></div>
-          <div class="graph-label">요일 (월-일)</div>
+          <div class="graph-label">요일 (일 ~ 토)</div>
+
+          <div class="reveal-section is-visible" style="margin-top: 16px">
+            <div class="recap-header">
+              <h3 style="margin: 0">사이트별 주간 누적 사용시간</h3>
+              <p class="section-desc">최근 7일 포그라운드 누적시간을 전체 사이트로 표시합니다.</p>
+            </div>
+            <div class="recap-list" id="weeklyAllSitesList"></div>
+          </div>
         </div>
       </section>
 

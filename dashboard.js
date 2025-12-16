@@ -5,6 +5,9 @@ import { createBlocklistTab } from './dashboard/tabs/blocklistTab.js';
 import { createSettingsTab } from './dashboard/tabs/settingsTab.js';
 import { createScheduleTab } from './dashboard/tabs/scheduleTab.js';
 
+const DASHBOARD_ACTIVE_TAB_KEY = 'dashboardActiveTab';
+const DASHBOARD_REFRESH_INTERVAL_MS = 60_000;
+
 let currentStats = { dates: {} };
 let currentBlockedUrls = [];
 let currentSettings = {};
@@ -37,6 +40,36 @@ function mergeFilterSettings(partial) {
   return merged;
 }
 
+function getSavedActiveTabId() {
+  try {
+    const v = localStorage.getItem(DASHBOARD_ACTIVE_TAB_KEY);
+    return typeof v === 'string' && v ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveActiveTabId(tabId) {
+  try {
+    if (!tabId) return;
+    localStorage.setItem(DASHBOARD_ACTIVE_TAB_KEY, String(tabId));
+  } catch (_) {}
+}
+
+function applyActiveTabId(tabId) {
+  if (!tabId || !UI.tabs || !UI.contents) return false;
+  const tabBtn = Array.from(UI.tabs).find((t) => t?.dataset?.tab === tabId);
+  const content = document.getElementById(tabId);
+  if (!tabBtn || !content) return false;
+
+  UI.tabs.forEach((t) => t.classList.remove('active'));
+  UI.contents.forEach((c) => c.classList.remove('active'));
+
+  tabBtn.classList.add('active');
+  content.classList.add('active');
+  return true;
+}
+
 function initDOMReferences() {
   UI.tabs = document.querySelectorAll('.nav-btn');
   UI.contents = document.querySelectorAll('.tab-content');
@@ -58,11 +91,13 @@ function initDOMReferences() {
   UI.dailyChange = document.getElementById('dailyChange');
   UI.dailyGraph = document.getElementById('dailyGraph');
   UI.dailyInsight = document.getElementById('dailyInsight');
+  UI.dailyAllSitesList = document.getElementById('dailyAllSitesList');
   UI.weeklyTotal = document.getElementById('weeklyTotal');
   UI.weeklyBlocked = document.getElementById('weeklyBlocked');
   UI.weeklyChange = document.getElementById('weeklyChange');
   UI.weeklyGraph = document.getElementById('weeklyGraph');
   UI.weeklyInsight = document.getElementById('weeklyInsight');
+  UI.weeklyAllSitesList = document.getElementById('weeklyAllSitesList');
 
   UI.blockedListDisplay = document.getElementById('blockedListDisplay');
   UI.newBlockUrlInput = document.getElementById('newBlockUrl');
@@ -178,6 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('js-enabled');
   initDOMReferences();
 
+  // 새로고침/재진입 시 마지막으로 보던 탭 유지
+  const savedTabId = getSavedActiveTabId();
+  if (savedTabId) applyActiveTabId(savedTabId);
+
   overviewTab = createOverviewTab({
     UI,
     getState: () => ({ currentStats, currentBlockedUrls }),
@@ -186,6 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
   detailedRecapTab = createDetailedRecapTab({
     UI,
     getState: () => ({ currentStats, currentBlockedUrls }),
+    onToggleBlockDomain: toggleBlockDomain,
   });
   blocklistTab = createBlocklistTab({
     UI,
@@ -228,6 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const target = document.getElementById(tab.dataset.tab);
       if (target) target.classList.add('active');
 
+      saveActiveTabId(tab.dataset.tab);
       renderActiveTab();
     });
   });
@@ -239,4 +280,29 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.storage.local.set({ darkMode: isDark }, () => renderActiveTab());
     });
   }
+
+  // 자동 갱신: (1) 대시보드가 보일 때 1분 주기, (2) 저장소 변경 시 즉시 반영
+  const refreshIfVisible = () => {
+    if (document.visibilityState !== 'visible') return;
+    loadDataAndRender();
+  };
+
+  setInterval(refreshIfVisible, DASHBOARD_REFRESH_INTERVAL_MS);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshIfVisible();
+  });
+
+  let storageRefreshTimer = null;
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+    if (document.visibilityState !== 'visible') return;
+
+    // 잦은 stats 업데이트로 렌더가 과도해지는 걸 막기 위해 디바운스합니다.
+    if (storageRefreshTimer) clearTimeout(storageRefreshTimer);
+    storageRefreshTimer = setTimeout(() => {
+      storageRefreshTimer = null;
+      refreshIfVisible();
+    }, 150);
+  });
 });

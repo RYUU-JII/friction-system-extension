@@ -5,6 +5,14 @@
     padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); color: var(--text-main); margin-bottom: 20px;
     font-size: 16px;
 }
+.date-input.is-inline {
+    margin-bottom: 0;
+    height: 36px;
+    font-size: 14px;
+    padding: 6px 10px;
+    line-height: 1;
+    box-sizing: border-box;
+}
 .summary-cards {
     display: flex; gap: 15px; margin-bottom: 30px;
 }
@@ -73,12 +81,67 @@ body.dark .legend-swatch { border-color: rgba(255,255,255,0.12); }
     transform: translateY(0);
 }
 
+.tooltip-title {
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.tooltip-line {
+    color: var(--text-main);
+}
+.tooltip-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 10px 0 8px;
+    opacity: 0.75;
+}
+.tooltip-subtitle {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+.tooltip-sites {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.tooltip-site {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    font-size: 12.5px;
+    line-height: 1.2;
+}
+.tooltip-favicon {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: rgba(148, 163, 184, 0.15);
+}
+body.dark .tooltip-favicon { background-color: rgba(148, 163, 184, 0.10); }
+.tooltip-domain {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-main);
+    font-weight: 700;
+}
+.tooltip-time {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
 .graph-container {
     height: 220px;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 1%;
+    gap: 0.4%;
     border-bottom: 1px solid var(--border-color);
     margin-top: 10px;
     padding: 4px 6px 28px;
@@ -100,7 +163,7 @@ body.dark .legend-swatch { border-color: rgba(255,255,255,0.12); }
     position: relative;
 }
 .bar-stack {
-    width: 80%;
+    width: 100%;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -144,4 +207,3 @@ body:not(.dark) .bar-segment + .bar-segment {
 .graph-label {
     text-align: center; color: var(--text-muted); font-size: 0.9em; margin-top: 10px;
 }
-

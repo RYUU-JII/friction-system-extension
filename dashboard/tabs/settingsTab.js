@@ -211,25 +211,60 @@ function getTextShuffleProbability(settings) {
 }
 
 function seededShuffleWords(text, seedStr, strength = 1) {
-  const words = String(text || '').split(/\s+/).filter(Boolean);
-  if (words.length <= 3) return String(text || '');
+  const original = String(text || '');
   const s = Math.max(0, Math.min(1, strength || 0));
-  if (s <= 0) return String(text || '');
+  if (s <= 0) return original;
+
+  // 공백(엔터 포함)을 보존해야 문단이 합쳐지지 않습니다.
+  const parts = original.split(/(\s+)/);
+  const wordSlots = [];
+  const words = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+    if (/^\s+$/.test(part)) continue;
+    wordSlots.push(i);
+    words.push(part);
+  }
+
+  if (words.length <= 3) return original;
 
   let seed = 0;
   const seedSource = String(seedStr || '');
   for (let i = 0; i < seedSource.length; i++) seed = (seed * 31 + seedSource.charCodeAt(i)) >>> 0;
 
-  const shuffled = words.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
+  const nextRand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
-    const j = seed % (i + 1);
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    return seed / 4294967296;
+  };
+  const nextInt = (max) => (max > 0 ? Math.floor(nextRand() * max) : 0);
+
+  // NOTE: "셔플 강도"는 '부분 섞기' 느낌이지만,
+  // 원문 단어의 누락/중복이 생기면 안 되므로 '스왑 기반'으로만 섞습니다(항상 순열 유지).
+  const outWords = words.slice();
+  const n = outWords.length;
+  const kMax = Math.min(25, Math.floor(n / 2));
+  const k = Math.max(1, Math.round(s * kMax));
+  const swapChance = Math.min(1, s * 1.2);
+  const passes = s >= 0.85 ? 2 : 1;
+
+  for (let pass = 0; pass < passes; pass++) {
+    for (let i = 0; i < n; i++) {
+      if (nextRand() > swapChance) continue;
+      const offset = nextInt(2 * k + 1) - k;
+      if (offset === 0) continue;
+      const j = Math.max(0, Math.min(n - 1, i + offset));
+      if (j === i) continue;
+      [outWords[i], outWords[j]] = [outWords[j], outWords[i]];
+    }
   }
 
-  const keep = Math.round((1 - s) * shuffled.length);
-  const out = shuffled.slice(0, Math.max(1, keep)).concat(words.slice(keep));
-  return out.join(' ');
+  for (let i = 0; i < wordSlots.length; i++) {
+    parts[wordSlots[i]] = outWords[i] ?? parts[wordSlots[i]];
+  }
+
+  return parts.join('');
 }
 
 export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSettings }) {

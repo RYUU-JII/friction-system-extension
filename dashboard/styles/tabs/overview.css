@@ -159,7 +159,7 @@ body.dark .overview-slide .recap-item {
     position: absolute; 
     top: 0; 
     left: 0; 
-    height: 4px;
+    height: 10px;
     background: var(--usage-bar-bg); 
     transition: width 0.5s ease;
     z-index: 1;
@@ -237,4 +237,3 @@ body.dark .overview-slide .recap-item {
     color: var(--btn-safe-fg);
     border-color: var(--btn-safe-border);
 }
-
