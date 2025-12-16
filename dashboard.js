@@ -76,6 +76,27 @@ function initDOMReferences() {
   UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
   UI.previewBefore = document.getElementById('previewBefore');
   UI.previewAfter = document.getElementById('previewAfter');
+  UI.settingsSaveCard = document.getElementById('settingsSaveCard');
+
+  UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
+  UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');
+  UI.nudgeStopBtn = document.getElementById('nudgeStopBtn');
+  UI.nudgeDebugStatus = document.getElementById('nudgeDebugStatus');
+  UI.nudgeSizeRange = document.getElementById('nudgeSizeRange');
+  UI.nudgeSizeOutput = document.getElementById('nudgeSizeOutput');
+  UI.nudgeSpeedRange = document.getElementById('nudgeSpeedRange');
+  UI.nudgeSpeedOutput = document.getElementById('nudgeSpeedOutput');
+  UI.nudgeSpawnIntervalRange = document.getElementById('nudgeSpawnIntervalRange');
+  UI.nudgeSpawnIntervalOutput = document.getElementById('nudgeSpawnIntervalOutput');
+  UI.nudgeMaxSpritesRange = document.getElementById('nudgeMaxSpritesRange');
+  UI.nudgeMaxSpritesOutput = document.getElementById('nudgeMaxSpritesOutput');
+  UI.nudgeSpeedRampRange = document.getElementById('nudgeSpeedRampRange');
+  UI.nudgeSpeedRampOutput = document.getElementById('nudgeSpeedRampOutput');
+
+  UI.nudgeAutoToggle = document.getElementById('nudgeAutoToggle');
+  UI.nudgeAutoToggleOutput = document.getElementById('nudgeAutoToggleOutput');
+  UI.nudgeAutoThresholdRange = document.getElementById('nudgeAutoThresholdRange');
+  UI.nudgeAutoThresholdOutput = document.getElementById('nudgeAutoThresholdOutput');
 
   UI.scheduleContainer = document.getElementById('time-slider-container');
   UI.scheduleToggle = document.getElementById('schedule-toggle');
@@ -219,4 +240,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
-

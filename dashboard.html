@@ -151,6 +151,7 @@
           <button type="button" class="settings-subtab-btn is-active" data-settings-subtab="media" role="tab" aria-selected="true">미디어 필터</button>
           <button type="button" class="settings-subtab-btn" data-settings-subtab="text" role="tab" aria-selected="false">텍스트 필터</button>
           <button type="button" class="settings-subtab-btn" data-settings-subtab="delay" role="tab" aria-selected="false">지연 필터</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="game" role="tab" aria-selected="false">게임 테스트</button>
         </div>
 
         <div class="card settings-preview" id="settingsPreview" style="margin-bottom: 16px">
@@ -172,9 +173,75 @@
           </div>
         </div>
 
+        <div class="card is-hidden" id="nudgeDebugPanel" style="margin-bottom: 16px">
+          <div class="settings-preview-header" style="margin-bottom: 10px">
+            <div class="settings-preview-title">
+              <h3 style="margin: 0">게임(개입) 테스트</h3>
+              <p style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px">
+                활성 탭(최근 사용 탭)에 스폰하여 움직임을 확인하고 튜닝합니다.
+              </p>
+            </div>
+          </div>
+
+          <h4 class="nudge-section-title">자동 개입(누적시간)</h4>
+          <p class="nudge-section-desc">차단 사이트 누적 시간이 기준을 넘으면 자동으로 스폰됩니다. 기본값은 OFF입니다.</p>
+          <div class="nudge-debug-grid">
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">사용</span>
+              <label class="switch" style="justify-self: start">
+                <input id="nudgeAutoToggle" type="checkbox" />
+                <span class="slider"></span>
+              </label>
+              <output id="nudgeAutoToggleOutput" class="nudge-debug-output">OFF</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">기준</span>
+              <input id="nudgeAutoThresholdRange" type="range" min="5" max="240" step="5" value="30" />
+              <output id="nudgeAutoThresholdOutput" class="nudge-debug-output">30분</output>
+            </label>
+          </div>
+
+          <hr class="nudge-divider" />
+          <h4 class="nudge-section-title">수동 테스트</h4>
+
+          <div class="nudge-debug-grid">
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">크기</span>
+              <input id="nudgeSizeRange" type="range" min="32" max="220" step="2" value="96" />
+              <output id="nudgeSizeOutput" class="nudge-debug-output">96px</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">속도</span>
+              <input id="nudgeSpeedRange" type="range" min="30" max="600" step="10" value="140" />
+              <output id="nudgeSpeedOutput" class="nudge-debug-output">140</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">스폰 간격</span>
+              <input id="nudgeSpawnIntervalRange" type="range" min="300" max="10000" step="100" value="4000" />
+              <output id="nudgeSpawnIntervalOutput" class="nudge-debug-output">4000ms</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">최대 개수</span>
+              <input id="nudgeMaxSpritesRange" type="range" min="1" max="20" step="1" value="6" />
+              <output id="nudgeMaxSpritesOutput" class="nudge-debug-output">6</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">가속(배율)</span>
+              <input id="nudgeSpeedRampRange" type="range" min="1" max="2" step="0.05" value="1.15" />
+              <output id="nudgeSpeedRampOutput" class="nudge-debug-output">1.15x</output>
+            </label>
+          </div>
+
+          <div class="nudge-debug-actions">
+            <button id="nudgeSpawnBtn" class="primary-btn" type="button">스폰</button>
+            <button id="nudgeStopBtn" class="primary-btn nudge-debug-stop" type="button">정지</button>
+            <span id="nudgeDebugStatus" class="nudge-debug-status"></span>
+          </div>
+        </div>
+
         <div class="settings-grid" id="settingsGrid"></div>
 
-        <div class="card" style="margin-top: 20px">
+        <div class="card" id="settingsSaveCard" style="margin-top: 20px">
           <button id="saveSettingsBtn" class="primary-btn">설정 저장</button>
           <span id="saveStatus" class="save-status"></span>
         </div>

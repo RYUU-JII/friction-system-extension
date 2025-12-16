@@ -46,7 +46,8 @@ const SELECTORS = {
     // VISUAL_TARGETS: "틀(컨테이너)"이 아닌 "콘텐츠(미디어/이미지)"에만 적용해 중첩 필터(누적 blur/grayscale)를 방지합니다.
     // - 컨테이너(예: article, p, li, a 등)에 filter를 걸면 자식까지 합성되어 단계적으로 옅어지는 현상이 생길 수 있습니다.
     // - X(트위터) 모달/포토 뷰어도 컨테이너 filter에 의해 "열리지만 안 보이는" 문제가 발생할 수 있어, 타겟을 leaf로 제한합니다.
-    VISUAL_TARGETS: ':is(img, picture, video, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
+    VISUAL_TARGETS: ':is(img, picture, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
+    VISUAL_VIDEO_TARGETS: ':is(video)',
     
     // INTERACTIVE_TARGETS는 네비게이션 및 인터랙션 요소를 포괄하도록 확장되었습니다.
     INTERACTIVE_TARGETS: ':is(a, button, article, [onclick], input[type="submit"], input[type="image"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="article"], [role="menuitem"], [role="option"], [role="tab"], [class*="link"], [class*="button"], [class*="btn"], figure):not(.stickyunit)',
@@ -71,6 +72,51 @@ const removeRootAttribute = (attr) => {
 };
 
 const VisualManager = {
+    _videoContainers: new Set(),
+    _videoObserver: null,
+
+    _clearVideoContainers() {
+        for (const el of this._videoContainers) {
+            try { el.removeAttribute('data-friction-video-container'); } catch (e) {}
+        }
+        this._videoContainers.clear();
+        if (this._videoObserver) {
+            try { this._videoObserver.disconnect(); } catch (e) {}
+            this._videoObserver = null;
+        }
+    },
+
+    _markVideoContainer(videoEl) {
+        const parent = videoEl && videoEl.parentElement;
+        if (!parent || parent === document.documentElement || parent === document.body) return;
+        parent.setAttribute('data-friction-video-container', '1');
+        this._videoContainers.add(parent);
+    },
+
+    _ensureVideoContainerTracking() {
+        document.querySelectorAll('video').forEach((v) => this._markVideoContainer(v));
+
+        if (this._videoObserver) return;
+        this._videoObserver = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes || []) {
+                    if (!(node instanceof Element)) continue;
+                    if (node.tagName === 'VIDEO') {
+                        this._markVideoContainer(node);
+                        continue;
+                    }
+                    if (!node.querySelectorAll) continue;
+                    node.querySelectorAll('video').forEach((v) => this._markVideoContainer(v));
+                }
+            }
+        });
+        try {
+            this._videoObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+        } catch (e) {
+            // ignore
+        }
+    },
+
     update(filters) {
         const blur = filters.blur;
         const desat = filters.desaturation;
@@ -88,12 +134,14 @@ const VisualManager = {
             return;
         }
 
-        const filterValues = [];
-        if (blur && blur.isActive) filterValues.push(`blur(${blur.value})`);
-        if (desat && desat.isActive) filterValues.push(`grayscale(${desat.value})`);
-        if (mediaBrightness && mediaBrightness.isActive) filterValues.push(`brightness(${mediaBrightness.value})`);
+        const baseFilterValues = [];
+        if (blur && blur.isActive) baseFilterValues.push(`blur(${blur.value})`);
+        if (desat && desat.isActive) baseFilterValues.push(`grayscale(${desat.value})`);
 
-        const combinedFilter = filterValues.length > 0 ? filterValues.join(' ') : 'none';
+        const brightnessFilter = mediaBrightness && mediaBrightness.isActive ? `brightness(${mediaBrightness.value})` : '';
+        const combinedFilterParts = baseFilterValues.concat(brightnessFilter ? [brightnessFilter] : []);
+        const combinedFilter = combinedFilterParts.length > 0 ? combinedFilterParts.join(' ') : 'none';
+        const videoLeafFilter = baseFilterValues.length > 0 ? baseFilterValues.join(' ') : 'none';
         
         let style = document.getElementById(STYLES.VISUAL.ID);
         if (!style) {
@@ -107,6 +155,10 @@ const VisualManager = {
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const opacityRule = mediaOpacity && mediaOpacity.isActive ? `opacity: ${mediaOpacity.value} !important;` : '';
 
+        const shouldTrackVideoContainers = !!(mediaBrightness && mediaBrightness.isActive) || !!(mediaOpacity && mediaOpacity.isActive);
+        if (shouldTrackVideoContainers) this._ensureVideoContainerTracking();
+        else this._clearVideoContainers();
+
         style.textContent = `
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS} {
                 filter: ${combinedFilter} !important;
@@ -114,12 +166,33 @@ const VisualManager = {
                 transition: filter 0.1s ease, opacity 0.1s ease;
                 /* will-change: filter; 제거 */
             }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
+                filter: ${videoLeafFilter} !important;
+                opacity: 1 !important;
+                transition: filter 0.1s ease;
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS}:hover {
+                filter: none !important;
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"] {
+                filter: ${brightnessFilter ? brightnessFilter : 'none'} !important;
+                ${opacityRule}
+                transition: filter 0.1s ease, opacity 0.1s ease;
+            }
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:hover {
+                filter: none !important;
+                opacity: 1 !important;
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:hover {
                 filter: none !important;
                 opacity: 1 !important;
             }
             /* 이중 필터 버그 수정: 자식 요소가 호버되면 부모 필터도 해제 */
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:has(:hover) {
+                filter: none !important;
+                opacity: 1 !important;
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:has(:hover) {
                 filter: none !important;
                 opacity: 1 !important;
             }
@@ -138,6 +211,7 @@ const VisualManager = {
         const style = document.getElementById(STYLES.VISUAL.ID);
         if (style) style.remove();
         setRootAttribute(STYLES.VISUAL.ATTR, 'none');
+        this._clearVideoContainers();
     }
 };
 
@@ -903,11 +977,446 @@ const InteractionManager = {
 
 
 // ===========================================================
+// 3.5 Nudge Game (Blocked-site focus reminder)
+// ===========================================================
+
+const NudgeGame = (() => {
+    const DEFAULT_CONFIG = {
+        spriteSizePx: 96,
+        baseSpeedPxPerSec: 140,
+        spawnIntervalMs: 4000,
+        maxSprites: 6,
+        speedRamp: 1.15,
+        asset: {
+            gifPath: 'samples/images/nudge-object.gif',
+            audioPath: 'samples/sounds/nudge-music.mp3',
+            label: 'nudge-object',
+        },
+        message: {
+            title: '잠깐!',
+            body: '오늘 이 사이트에서 시간을 너무 많이 썼어. 잠깐 쉬고 갈래?',
+        },
+    };
+
+    let config = DEFAULT_CONFIG;
+    let mode = 'auto';
+    let root = null;
+    let shadow = null;
+    let layer = null;
+    let sprites = [];
+    let rafId = null;
+    let lastTs = null;
+    let spawnTimer = null;
+    let modalOpen = false;
+    let audio = null;
+    let audioFadeToken = 0;
+    let pendingAudioUnlock = false;
+
+    function clamp(n, min, max) {
+        const x = Number(n);
+        if (!Number.isFinite(x)) return min;
+        return Math.max(min, Math.min(max, x));
+    }
+
+    function mergeConfig(partial) {
+        const src = partial && typeof partial === 'object' ? partial : {};
+        const merged = {
+            ...DEFAULT_CONFIG,
+            ...src,
+            asset: {
+                ...DEFAULT_CONFIG.asset,
+                ...(src.asset && typeof src.asset === 'object' ? src.asset : {}),
+            },
+            message: {
+                ...DEFAULT_CONFIG.message,
+                ...(src.message && typeof src.message === 'object' ? src.message : {}),
+            },
+        };
+
+        merged.spriteSizePx = clamp(merged.spriteSizePx, 32, 260);
+        merged.baseSpeedPxPerSec = clamp(merged.baseSpeedPxPerSec, 20, 1200);
+        merged.spawnIntervalMs = clamp(merged.spawnIntervalMs, 200, 30_000);
+        merged.maxSprites = Math.round(clamp(merged.maxSprites, 1, 40));
+        merged.speedRamp = clamp(merged.speedRamp, 1.0, 3.0);
+        return merged;
+    }
+
+    function ensureRoot() {
+        if (root && shadow && layer) return;
+        root = document.createElement('div');
+        root.id = 'friction-nudge-root';
+        root.style.position = 'fixed';
+        root.style.inset = '0';
+        root.style.zIndex = '2147483647';
+        root.style.pointerEvents = 'none';
+
+        shadow = root.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+            <style>
+                :host { all: initial; }
+                .layer { position: fixed; inset: 0; pointer-events: none; }
+                .sprite {
+                    position: fixed;
+                    left: 0;
+                    top: 0;
+                    width: 96px;
+                    height: 96px;
+                    pointer-events: auto;
+                    user-select: none;
+                    -webkit-user-drag: none;
+                    will-change: transform;
+                    cursor: pointer;
+                    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.22));
+                }
+                .modal-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    backdrop-filter: blur(6px);
+                    pointer-events: auto;
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+                .modal-backdrop.is-open { display: flex; }
+                .modal {
+                    width: min(520px, 92vw);
+                    background: rgba(255,255,255,0.92);
+                    color: #0f172a;
+                    border: 1px solid rgba(226, 232, 240, 0.9);
+                    border-radius: 18px;
+                    box-shadow: 0 22px 55px rgba(0,0,0,0.25);
+                    padding: 18px 18px 16px;
+                    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, 'Noto Sans KR', sans-serif;
+                }
+                .modal h3 { margin: 0 0 6px; font-size: 18px; }
+                .modal p { margin: 0 0 14px; color: rgba(15,23,42,0.72); line-height: 1.45; }
+                .actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+                .btn {
+                    border: 1px solid rgba(148, 163, 184, 0.35);
+                    background: rgba(255,255,255,0.9);
+                    color: #0f172a;
+                    padding: 10px 14px;
+                    border-radius: 12px;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+                .btn.primary {
+                    background: #6366f1;
+                    color: #fff;
+                    border-color: transparent;
+                }
+                .btn:focus-visible { outline: 3px solid rgba(99, 102, 241, 0.35); outline-offset: 2px; }
+            </style>
+            <div class="layer"></div>
+            <div class="modal-backdrop" id="nudgeModalBackdrop" role="dialog" aria-modal="true" aria-label="집중 환기">
+                <div class="modal">
+                    <h3 id="nudgeTitle"></h3>
+                    <p id="nudgeBody"></p>
+                    <div class="actions">
+                        <button class="btn" id="nudgeContinueBtn" type="button">계속하기</button>
+                        <button class="btn primary" id="nudgeLeaveBtn" type="button">대시보드로 이동</button>
+                    </div>
+                </div>
+            </div>
+            <audio id="nudgeBgm" preload="auto" loop></audio>
+        `;
+
+        layer = shadow.querySelector('.layer');
+        audio = shadow.getElementById('nudgeBgm');
+
+        const backdrop = shadow.getElementById('nudgeModalBackdrop');
+        const btnContinue = shadow.getElementById('nudgeContinueBtn');
+        const btnLeave = shadow.getElementById('nudgeLeaveBtn');
+
+        btnContinue?.addEventListener('click', () => {
+            ackAndStop();
+        });
+        btnLeave?.addEventListener('click', () => {
+            navigateToDashboard();
+        });
+        backdrop?.addEventListener('click', (e) => {
+            if (e.target === backdrop) {
+                ackAndStop();
+            }
+        });
+
+        document.documentElement.appendChild(root);
+    }
+
+    function setModalOpen(isOpen) {
+        modalOpen = isOpen;
+        const backdrop = shadow?.getElementById('nudgeModalBackdrop');
+        if (backdrop) backdrop.classList.toggle('is-open', !!isOpen);
+        if (isOpen) {
+            shadow?.getElementById('nudgeLeaveBtn')?.focus?.();
+        }
+    }
+
+    function setModalText(title, body) {
+        const t = shadow?.getElementById('nudgeTitle');
+        const b = shadow?.getElementById('nudgeBody');
+        if (t) t.textContent = title || DEFAULT_CONFIG.message.title;
+        if (b) b.textContent = body || DEFAULT_CONFIG.message.body;
+    }
+
+    function applyAudioSource() {
+        if (!audio) return;
+        const src = config?.asset?.audioPath ? chrome.runtime.getURL(config.asset.audioPath) : '';
+        if (!src) return;
+        if (audio.getAttribute('src') !== src) {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.setAttribute('src', src);
+            audio.load();
+        }
+        audio.volume = 0;
+    }
+
+    function fadeAudioTo(targetVolume, { pauseAtEnd = false } = {}) {
+        const a = audio;
+        if (!a) return;
+        const token = ++audioFadeToken;
+        const from = clamp(a.volume, 0, 1);
+        const to = clamp(targetVolume, 0, 1);
+        const duration = 180;
+        const start = performance.now();
+
+        if (to > 0 && a.paused) {
+            a.play().then(() => {
+                pendingAudioUnlock = false;
+            }).catch(() => {
+                pendingAudioUnlock = true;
+            });
+        }
+
+        function step(now) {
+            if (token !== audioFadeToken) return;
+            const t = Math.min(1, (now - start) / duration);
+            const next = clamp(from + (to - from) * t, 0, 1);
+            a.volume = next;
+            if (t < 1) requestAnimationFrame(step);
+            else if (pauseAtEnd && to === 0) a.pause();
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    function randomVelocity(speed) {
+        const angle = Math.random() * Math.PI * 2;
+        return { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+    }
+
+    function updateSpriteSize(sprite) {
+        const size = `${config.spriteSizePx}px`;
+        sprite.el.style.width = size;
+        sprite.el.style.height = size;
+    }
+
+    function spawnOne() {
+        ensureRoot();
+        if (!layer) return;
+        if (sprites.length >= config.maxSprites) return;
+
+        const el = document.createElement('img');
+        el.className = 'sprite';
+        el.alt = config?.asset?.label || 'nudge';
+        el.dataset.frictionFallbackStep = '0';
+        el.src = chrome.runtime.getURL(config.asset.gifPath);
+        el.addEventListener('error', () => {
+            const step = parseInt(el.dataset.frictionFallbackStep || '0', 10) || 0;
+            if (step === 0 && config.asset.gifPath !== 'samples/images/nudge-object.gif') {
+                el.dataset.frictionFallbackStep = '1';
+                el.src = chrome.runtime.getURL('samples/images/nudge-object.gif');
+                return;
+            }
+            if (step <= 1) {
+                el.dataset.frictionFallbackStep = '2';
+                el.src = chrome.runtime.getURL('samples/images/rat-dance.gif');
+            }
+        });
+        el.decoding = 'async';
+        updateSpriteSize({ el });
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const size = config.spriteSizePx;
+
+        const x = Math.random() * Math.max(1, vw - size);
+        const y = Math.random() * Math.max(1, vh - size);
+
+        const speed = config.baseSpeedPxPerSec * (sprites.length === 0 ? 1 : Math.pow(config.speedRamp, sprites.length * 0.5));
+        const vel = randomVelocity(speed);
+
+        const sprite = { el, x, y, vx: vel.vx, vy: vel.vy };
+
+        el.addEventListener('click', () => {
+            setModalText(config.message.title, config.message.body);
+            setModalOpen(true);
+            if (pendingAudioUnlock) fadeAudioTo(0.85);
+        });
+
+        layer.appendChild(el);
+        sprites.push(sprite);
+        el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    }
+
+    function speedUpAll() {
+        for (const s of sprites) {
+            s.vx *= config.speedRamp;
+            s.vy *= config.speedRamp;
+        }
+    }
+
+    function startSpawner() {
+        if (spawnTimer) clearInterval(spawnTimer);
+        spawnTimer = setInterval(() => {
+            if (modalOpen) return;
+            if (sprites.length < config.maxSprites) {
+                spawnOne();
+                speedUpAll();
+            }
+        }, config.spawnIntervalMs);
+    }
+
+    function stopSpawner() {
+        if (!spawnTimer) return;
+        clearInterval(spawnTimer);
+        spawnTimer = null;
+    }
+
+    function loop(ts) {
+        if (!root) return;
+        if (lastTs === null) lastTs = ts;
+        const dt = Math.min(0.05, (ts - lastTs) / 1000);
+        lastTs = ts;
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const size = config.spriteSizePx;
+
+        for (const s of sprites) {
+            s.x += s.vx * dt;
+            s.y += s.vy * dt;
+
+            if (s.x <= 0) { s.x = 0; s.vx = Math.abs(s.vx); }
+            if (s.y <= 0) { s.y = 0; s.vy = Math.abs(s.vy); }
+            if (s.x >= vw - size) { s.x = vw - size; s.vx = -Math.abs(s.vx); }
+            if (s.y >= vh - size) { s.y = vh - size; s.vy = -Math.abs(s.vy); }
+
+            s.el.style.transform = `translate3d(${Math.round(s.x)}px, ${Math.round(s.y)}px, 0)`;
+        }
+
+        rafId = requestAnimationFrame(loop);
+    }
+
+    function startLoop() {
+        if (rafId) cancelAnimationFrame(rafId);
+        lastTs = null;
+        rafId = requestAnimationFrame(loop);
+    }
+
+    function stopLoop() {
+        if (!rafId) return;
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        lastTs = null;
+    }
+
+    function ackAndStop() {
+        stop();
+    }
+
+    function navigateToDashboard() {
+        stop();
+        try {
+            window.location.href = chrome.runtime.getURL('dashboard.html');
+        } catch (e) {}
+    }
+
+    function start(nextConfig) {
+        config = mergeConfig(nextConfig);
+        mode = (nextConfig && typeof nextConfig === 'object' && nextConfig.__mode === 'debug') ? 'debug' : 'auto';
+        ensureRoot();
+        applyAudioSource();
+        setModalOpen(false);
+
+        if (sprites.length === 0) spawnOne();
+        startSpawner();
+        startLoop();
+
+        fadeAudioTo(0.65);
+    }
+
+    function stop() {
+        stopSpawner();
+        stopLoop();
+        sprites.forEach((s) => s.el.remove());
+        sprites = [];
+        if (audio) fadeAudioTo(0, { pauseAtEnd: true });
+        if (root) root.remove();
+        root = null;
+        shadow = null;
+        layer = null;
+        audio = null;
+        modalOpen = false;
+        pendingAudioUnlock = false;
+        mode = 'auto';
+    }
+
+    function setConfig(partial) {
+        config = mergeConfig({ ...config, ...(partial && typeof partial === 'object' ? partial : {}) });
+        for (const s of sprites) updateSpriteSize(s);
+        startSpawner();
+    }
+
+    function spawn() {
+        spawnOne();
+    }
+
+    function isActive() {
+        return !!root;
+    }
+
+    function getMode() {
+        return mode;
+    }
+
+    return { start, stop, setConfig, spawn, isActive, getMode };
+})();
+
+// ===========================================================
 // 4. Main Controller
 // ===========================================================
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (!request.isBlocked) {
+      if (request && typeof request.type === 'string') {
+          try {
+              if (request.type === 'NUDGE_START') {
+                  const cfg = request.payload?.config || {};
+                  NudgeGame.start({ ...cfg, __mode: request.payload?.reason === 'debug' ? 'debug' : 'auto' });
+              } else if (request.type === 'NUDGE_STOP') {
+                  NudgeGame.stop();
+              } else if (request.type === 'NUDGE_DEBUG_START') {
+                  const cfg = request.payload?.config || {};
+                  NudgeGame.start({ ...cfg, __mode: 'debug' });
+              } else if (request.type === 'NUDGE_DEBUG_CONFIG') {
+                  NudgeGame.setConfig(request.payload?.config);
+              } else if (request.type === 'NUDGE_DEBUG_SPAWN') {
+                  const cfg = request.payload?.config || {};
+                  if (!NudgeGame.isActive()) NudgeGame.start({ ...cfg, __mode: 'debug' });
+                  else if (request.payload?.config) NudgeGame.setConfig(request.payload?.config);
+                  NudgeGame.spawn();
+              }
+              sendResponse?.({ ok: true });
+          } catch (e) {
+              sendResponse?.({ ok: false, error: String(e?.message || e) });
+          }
+          return false;
+      }
+
+      if (typeof request?.isBlocked === 'boolean' && !request.isBlocked) {
           VisualManager.remove();
           DelayManager.remove();
           TextManager.remove();
@@ -915,9 +1424,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           InputDelayManager.remove();
           InteractionManager.removeClickDelay();
           InteractionManager.removeScroll();
-          return;
+          if (NudgeGame.isActive() && NudgeGame.getMode() !== 'debug') {
+              NudgeGame.stop();
+          }
+          sendResponse?.({ ok: true });
+          return false;
       }
 
+    if (!request || !request.filters) return;
     const { filters } = request;
     
     VisualManager.update(filters);
@@ -936,6 +1450,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       TextManager.update(filters);
       TextShuffleManager.update(filters.textShuffle);
+      sendResponse?.({ ok: true });
+      return false;
   });
 
 // ===========================================================
