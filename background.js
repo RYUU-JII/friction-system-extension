@@ -3,6 +3,33 @@ import { isFrictionTime, getLocalDateStr, ensureNumber, getHostname } from './ut
 
 const DEFAULT_FILTER_SETTINGS = CONFIG_DEFAULT_FILTER_SETTINGS;
 
+const DEFAULT_NUDGE_CONFIG = {
+    // 자동 개입(게임) 트리거: 기본은 OFF (대시보드에서 켤 때만 동작)
+    enabled: false,
+
+    // 하루 누적(active) 기준
+    thresholdMs: 30 * 60 * 1000,
+    oncePerHostPerDay: true,
+
+    // 표시/난이도 파라미터
+    spriteSizePx: 96,
+    baseSpeedPxPerSec: 140,
+    spawnIntervalMs: 4000,
+    maxSprites: 6,
+    speedRamp: 1.15,
+
+    asset: {
+        gifPath: 'samples/images/nudge-object.gif',
+        audioPath: 'samples/sounds/nudge-music.mp3',
+        label: 'nudge-object',
+    },
+
+    message: {
+        title: '잠깐!',
+        body: '지금 차단 사이트에 머무는 시간이 길어졌어요. 대시보드로 이동해서 오늘 리캡을 확인해볼까요?',
+    },
+};
+
 function mergeFilterSettings(partial) {
     const merged = {};
     const source = partial && typeof partial === 'object' ? partial : {};
@@ -35,6 +62,88 @@ const CACHE_SAVE_INTERVAL_MS = 300000;
 setInterval(() => {
     saveStatsCache();  // 전체 강제 저장
 }, CACHE_SAVE_INTERVAL_MS);
+
+function mergeNudgeConfig(partial) {
+    const src = partial && typeof partial === 'object' ? partial : {};
+    return {
+        ...DEFAULT_NUDGE_CONFIG,
+        ...src,
+        asset: {
+            ...DEFAULT_NUDGE_CONFIG.asset,
+            ...(src.asset && typeof src.asset === 'object' ? src.asset : {}),
+        },
+        message: {
+            ...DEFAULT_NUDGE_CONFIG.message,
+            ...(src.message && typeof src.message === 'object' ? src.message : {}),
+        },
+    };
+}
+
+function getNudgeDayKey(dateStr, hostname) {
+    return `${dateStr}|${hostname}`;
+}
+
+async function isNudgeShown(key) {
+    const session = await chrome.storage.session.get({ nudgeShown: {} });
+    return !!session.nudgeShown?.[key];
+}
+
+async function markNudgeShown(key) {
+    const session = await chrome.storage.session.get({ nudgeShown: {} });
+    const nudgeShown = session.nudgeShown || {};
+    if (nudgeShown[key]) return;
+    nudgeShown[key] = Date.now();
+    await chrome.storage.session.set({ nudgeShown });
+}
+
+async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
+    if (!tabId || !url) return;
+    if (url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
+
+    await loadStatsCache();
+    const hostname = getHostname(url);
+    if (!hostname) return;
+
+    const dateStr = getLocalDateStr();
+    const key = getNudgeDayKey(dateStr, hostname);
+
+    const items = await chrome.storage.local.get({
+        blockedUrls: [],
+        schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
+        nudgeConfig: {},
+    });
+
+    if (!Array.isArray(items.blockedUrls) || !items.blockedUrls.includes(hostname)) return;
+    if (!isFrictionTime(items.schedule)) return;
+
+    const config = mergeNudgeConfig(items.nudgeConfig);
+    if (!config.enabled && !force) return;
+
+    if (!force && config.oncePerHostPerDay !== false) {
+        if (await isNudgeShown(key)) return;
+    }
+
+    if (!force) {
+        const domainData = statsCache?.dates?.[dateStr]?.domains?.[hostname];
+        const activeMs = domainData ? ensureNumber(domainData.active) : 0;
+        if (activeMs < ensureNumber(config.thresholdMs)) return;
+    }
+
+    try {
+        await chrome.tabs.sendMessage(tabId, {
+            type: 'NUDGE_START',
+            payload: {
+                hostname,
+                dateStr,
+                config,
+                reason: force ? 'debug' : 'threshold',
+            },
+        });
+        if (!force && config.oncePerHostPerDay !== false) await markNudgeShown(key);
+    } catch (e) {
+        // content script not ready / tab unavailable
+    }
+}
 
 // ===========================================================
 // 1. 저장 관련 함수들
@@ -263,6 +372,7 @@ async function sendFrictionMessage(tabId, url) {
     } catch (e) {
         // 탭이 아직 로드되지 않았거나 닫힌 경우 무시
     }
+
 }
 
 async function broadcastSettingsUpdate() {
@@ -296,6 +406,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === 'oneMinuteTick') {
         await trackAllTabsBatch();
         await checkScheduleStatus();
+        if (lastActiveTabId !== null) {
+            try {
+                const tab = await chrome.tabs.get(lastActiveTabId);
+                if (tab?.url) await maybeTriggerNudge(lastActiveTabId, tab.url);
+            } catch (e) {
+                // ignore
+            }
+        }
     }
 });
 
@@ -307,16 +425,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const knownActions = new Set([
         "SETTINGS_UPDATED",
         "SCHEDULE_UPDATED",
+        "NUDGE_CONFIG_UPDATED",
         "DEBUG_GET_CACHE",
         "DEBUG_FORCE_SAVE",
         "DEBUG_TRACK_NOW",
     ]);
     if (!knownActions.has(request.action)) return false;
-    if (request.action === "SETTINGS_UPDATED" || request.action === "SCHEDULE_UPDATED") {
+    if (request.action === "SETTINGS_UPDATED" || request.action === "SCHEDULE_UPDATED" || request.action === "NUDGE_CONFIG_UPDATED") {
         // async 함수를 즉시 실행
         (async () => {
             await broadcastSettingsUpdate();
             await checkScheduleStatus();
+            if (lastActiveTabId !== null) {
+                try {
+                    const tab = await chrome.tabs.get(lastActiveTabId);
+                    if (tab?.url) await maybeTriggerNudge(lastActiveTabId, tab.url);
+                } catch (e) {
+                    // ignore
+                }
+            }
         })().catch((e) => console.error("Error handling settings/schedule update:", e));
         sendResponse({ success: true });
         return false;
@@ -331,7 +458,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return false;
     }
-    
+
     if (request.action === "DEBUG_FORCE_SAVE") {
         saveStatsCache().then(() => {
             sendResponse({ success: true, message: "저장 완료" });
@@ -360,6 +487,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (tab.url && changeInfo.status === 'complete') {
         await sendFrictionMessage(tabId, tab.url);
         await settleTabTime(tab.url, tab.active, true);
+        if (tab.active) {
+            await maybeTriggerNudge(tabId, tab.url);
+        }
     }
 });
 
@@ -375,6 +505,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
             await sendFrictionMessage(tab.id, tab.url);
             await settleTabTime(tab.url, true, false);
             lastActiveTabId = activeInfo.tabId;
+            await maybeTriggerNudge(tab.id, tab.url);
         }
     } catch (e) {
         console.error("Error handling tab activation:", e);
@@ -391,6 +522,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
                 await sendFrictionMessage(activeTab.id, activeTab.url);
                 await settleTabTime(activeTab.url, true, false);
                 lastActiveTabId = activeTab.id;
+                await maybeTriggerNudge(activeTab.id, activeTab.url);
             }
         } catch (e) {
             console.error("Error handling window focus:", e);

@@ -2,6 +2,8 @@
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
+.is-hidden { display: none !important; }
+
 .reveal-section {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -61,4 +63,3 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
-
