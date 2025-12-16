@@ -248,12 +248,28 @@ async function calculateTabTime(hostname, now, isActive) {
             background: 0, 
             visits: 0, 
             hourly: Array(24).fill(0), 
+            hourlyActive: Array(24).fill(0),
+            hourlyBackground: Array(24).fill(0),
             lastTrackedTime: now 
         };
         return true;
     }
 
     const domainData = dateData.domains[hostname];
+
+    // Backward compatible: 기존 저장 데이터(hourly에 bg 포함)를 유지하면서, 포그라운드/백그라운드 시간대 분리를 추가합니다.
+    if (!Array.isArray(domainData.hourly) || domainData.hourly.length !== 24) {
+        domainData.hourly = Array(24).fill(0);
+    }
+    if (!Array.isArray(domainData.hourlyActive) || domainData.hourlyActive.length !== 24 || !Array.isArray(domainData.hourlyBackground) || domainData.hourlyBackground.length !== 24) {
+        const hourlyTotal = Array.isArray(domainData.hourly) && domainData.hourly.length === 24 ? domainData.hourly.slice() : Array(24).fill(0);
+        const activeTotal = ensureNumber(domainData.active);
+        const backgroundTotal = ensureNumber(domainData.background);
+        const sum = activeTotal + backgroundTotal;
+        const ratio = sum > 0 ? (activeTotal / sum) : 0;
+        domainData.hourlyActive = hourlyTotal.map((v) => Math.round(ensureNumber(v) * ratio));
+        domainData.hourlyBackground = hourlyTotal.map((v, i) => Math.max(0, ensureNumber(v) - domainData.hourlyActive[i]));
+    }
     const lastTime = ensureNumber(domainData.lastTrackedTime);
     
     if (lastTime === 0) {
@@ -272,6 +288,8 @@ async function calculateTabTime(hostname, now, isActive) {
     const timeType = isActive ? 'active' : 'background';
     domainData[timeType] += elapsed;
     domainData.hourly[hour] += elapsed;
+    if (isActive) domainData.hourlyActive[hour] += elapsed;
+    else domainData.hourlyBackground[hour] += elapsed;
     domainData.lastTrackedTime = now;
 
     // Update totals

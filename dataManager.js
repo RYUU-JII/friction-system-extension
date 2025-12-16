@@ -130,7 +130,16 @@ export function getDailyData(stats, dateStr, blockedUrls) {
     
     for (let h = 0; h < 24; h++) {
         Object.entries(domains).forEach(([domain, domainData]) => {
-            const time = domainData.hourly[h] || 0;
+            const hasHourlyActive = Array.isArray(domainData.hourlyActive) && domainData.hourlyActive.length === 24;
+            const rawHour = hasHourlyActive ? (domainData.hourlyActive[h] || 0) : (domainData.hourly?.[h] || 0);
+
+            // 기존 데이터는 hourly에 background가 섞여있어 비율로 보정(근사)해 포그라운드만 추정합니다.
+            const active = domainData.active || 0;
+            const background = domainData.background || 0;
+            const sum = active + background;
+            const ratio = sum > 0 ? (active / sum) : 0;
+            const time = hasHourlyActive ? rawHour : Math.round(rawHour * ratio);
+
             hourly[h] += time;
             if (blockedUrls.includes(domain)) {
                 hourlyBlocked[h] += time;
@@ -144,9 +153,10 @@ export function getDailyData(stats, dateStr, blockedUrls) {
     const prevDateStr = date.toISOString().split('T')[0];
     const prevData = stats.dates[prevDateStr];
     
-    const total = data.totals.totalActive + data.totals.totalBackground;
-    const blocked = data.totals.blockedActive + data.totals.blockedBackground;
-    const prevTotal = prevData ? (prevData.totals.totalActive + prevData.totals.totalBackground) : 0;
+    // 총합은 포그라운드(Active)만 표시합니다.
+    const total = data.totals.totalActive || 0;
+    const blocked = data.totals.blockedActive || 0;
+    const prevTotal = prevData ? (prevData.totals.totalActive || 0) : 0;
     
     const diff = total - prevTotal;
     const change = formatTime(Math.abs(diff));
@@ -161,6 +171,7 @@ export function getWeeklyData(stats, blockedUrls) {
     let weeklyTotal = 0, weeklyBlocked = 0, prevWeeklyTotal = 0;
     let weekdayData = Array(7).fill(0);  // Sun=0 ~ Sat=6
     let weekdayBlocked = Array(7).fill(0);
+    let weekdayDateStr = Array(7).fill('');
 
     // 지난 7일 데이터 (이번 주 데이터)
     for (let i = 0; i < 7; i++) {
@@ -174,16 +185,17 @@ export function getWeeklyData(stats, blockedUrls) {
 
         if (stats.dates[dateStr]) {
              Object.entries(stats.dates[dateStr].domains).forEach(([domain, data]) => {
-                const totalTime = (data.active || 0) + (data.background || 0);
-                dayTotal += totalTime;
+                const activeTime = (data.active || 0);
+                dayTotal += activeTime;
                 if (blockedUrls.includes(domain)) {
-                    dayBlocked += totalTime;
+                    dayBlocked += activeTime;
                 }
             });
         }
         
         weekdayData[weekday] += dayTotal;
         weekdayBlocked[weekday] += dayBlocked;
+        weekdayDateStr[weekday] = dateStr;
         weeklyTotal += dayTotal;
         weeklyBlocked += dayBlocked;
     }
@@ -196,7 +208,7 @@ export function getWeeklyData(stats, blockedUrls) {
         if (stats.dates[dateStr]) {
             let dayTotal = 0;
              Object.entries(stats.dates[dateStr].domains).forEach(([domain, data]) => {
-                dayTotal += (data.active || 0) + (data.background || 0);
+                dayTotal += (data.active || 0);
             });
             prevWeeklyTotal += dayTotal;
         }
@@ -206,7 +218,14 @@ export function getWeeklyData(stats, blockedUrls) {
     const change = formatTime(Math.abs(diff));
     const changeStr = diff > 0 ? `+${change}` : (diff < 0 ? `-${change}` : '0초');
 
-    return { weekdayData: rotateArray(weekdayData), weekdayBlocked: rotateArray(weekdayBlocked), total: weeklyTotal, blocked: weeklyBlocked, change: changeStr };
+    return {
+        weekdayData: rotateArray(weekdayData),
+        weekdayBlocked: rotateArray(weekdayBlocked),
+        weekdayDateStr: rotateArray(weekdayDateStr),
+        total: weeklyTotal,
+        blocked: weeklyBlocked,
+        change: changeStr
+    };
 }
 
 // 배열을 오늘 요일(일) 기준으로 재정렬 (JS getDay: 0=일 ~ 6=토) -> [일, 월, 화, 수, 목, 금, 토] 순서로 출력하기 위함

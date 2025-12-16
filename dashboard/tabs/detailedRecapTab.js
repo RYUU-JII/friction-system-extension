@@ -81,19 +81,116 @@ function bindChartTooltip(container) {
       hideTooltip(tooltipEl);
       return;
     }
+    const html = bar.dataset.tooltipHtml || '';
     const text = bar.dataset.tooltip || '';
-    if (!text) {
+    if (!html && !text) {
       hideTooltip(tooltipEl);
       return;
     }
-    tooltipEl.textContent = text;
+    if (html) tooltipEl.innerHTML = html;
+    else tooltipEl.textContent = text;
     positionTooltip(tooltipEl, e.clientX, e.clientY);
   });
 
   container.addEventListener('mouseleave', () => hideTooltip(tooltipEl));
 }
 
-export function createDetailedRecapTab({ UI, getState }) {
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function faviconUrl(domain) {
+  const d = String(domain || '').trim();
+  if (!d) return '';
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=32`;
+}
+
+function getDomainHourlyActive(domainData, hourIdx) {
+  if (!domainData || hourIdx < 0 || hourIdx > 23) return 0;
+  if (Array.isArray(domainData.hourlyActive) && domainData.hourlyActive.length === 24) {
+    return domainData.hourlyActive[hourIdx] || 0;
+  }
+
+  const raw = domainData.hourly?.[hourIdx] || 0;
+  const active = domainData.active || 0;
+  const background = domainData.background || 0;
+  const sum = active + background;
+  const ratio = sum > 0 ? (active / sum) : 0;
+  return Math.round(raw * ratio);
+}
+
+function buildTopSitesHtml(items) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+
+  const rows = items
+    .map((it) => {
+      const domain = escapeHtml(it.domain);
+      const time = escapeHtml(formatTime(it.time));
+      const icon = faviconUrl(it.domain);
+      const iconStyle = icon ? ` style="background-image:url('${escapeHtml(icon)}')"` : '';
+      return `
+        <div class="tooltip-site">
+          <span class="tooltip-favicon"${iconStyle}></span>
+          <span class="tooltip-domain">${domain}</span>
+          <span class="tooltip-time">${time}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="tooltip-divider"></div>
+    <div class="tooltip-subtitle">Top 3</div>
+    <div class="tooltip-sites">${rows}</div>
+  `;
+}
+
+function renderUsageList(container, items, { emptyMessage = '표시할 데이터가 없어요.' } = {}) {
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!Array.isArray(items) || items.length === 0) {
+    const el = document.createElement('div');
+    el.className = 'empty-state';
+    el.textContent = emptyMessage;
+    container.appendChild(el);
+    return;
+  }
+
+  const maxVal = Math.max(...items.map((it) => it.totalTime || 0), 1);
+
+  items.forEach((item) => {
+    const barWidth = (item.totalTime / maxVal) * 100;
+    const el = document.createElement('div');
+    el.className = 'recap-item';
+    const barClass = `usage-bar is-gradient ${item.isBlocked ? 'is-blocked' : ''}`.trim();
+
+    el.innerHTML = `
+      <div class="${barClass}" style="width: ${barWidth}%"></div>
+      <div class="recap-content">
+        <div class="domain-info">
+          <div class="favicon" style="background-image: url('${faviconUrl(item.domain)}')"></div>
+          <span class="domain-name">${escapeHtml(item.domain)}</span>
+        </div>
+        <div class="stats-group">
+          <span class="time">${escapeHtml(item.timeStr)}</span>
+          <button class="list-block-btn ${item.isBlocked ? 'is-blocked' : ''}" data-domain="${escapeHtml(item.domain)}">
+            ${item.isBlocked ? '해제' : '차단'}
+          </button>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(el);
+  });
+}
+
+export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
   let mode = 'daily';
 
   function setMode(nextMode) {
@@ -102,6 +199,7 @@ export function createDetailedRecapTab({ UI, getState }) {
       UI.toggleDaily.classList.toggle('active', mode === 'daily');
       UI.toggleWeekly.classList.toggle('active', mode === 'weekly');
     }
+    if (UI.dailyDate) UI.dailyDate.classList.toggle('is-hidden', mode !== 'daily');
     display();
   }
 
@@ -140,6 +238,28 @@ export function createDetailedRecapTab({ UI, getState }) {
       UI.dailyInsight.textContent = peak ? `${base} · 최고 ${peak.label} (${peak.pct}%)` : base;
     }
 
+    const domains = currentStats?.dates?.[dateStr]?.domains || {};
+
+    const allDailyItems = Object.entries(domains)
+      .map(([domain, domainData]) => {
+        const totalTime = domainData?.active || 0;
+        return {
+          domain,
+          totalTime,
+          timeStr: formatTime(totalTime),
+          isBlocked: currentBlockedUrls.includes(domain),
+        };
+      })
+      .filter((it) => it.totalTime > 0)
+      .sort((a, b) => b.totalTime - a.totalTime);
+
+    const top3ByHour = (hourIdx) =>
+      Object.entries(domains)
+        .map(([domain, domainData]) => ({ domain, time: getDomainHourlyActive(domainData, hourIdx) }))
+        .filter((x) => x.time > 0)
+        .sort((a, b) => b.time - a.time)
+        .slice(0, 3);
+
     hourly.forEach((time, h) => {
       const height = (time / maxHour) * 100;
       const blockedTime = hourlyBlocked[h] || 0;
@@ -147,6 +267,13 @@ export function createDetailedRecapTab({ UI, getState }) {
       const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
       const safePct = time > 0 ? (safeTime / time) * 100 : 0;
       const tooltip = `${h}시\n총 ${formatTime(time)}\n차단 ${formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+      const topHtml = buildTopSitesHtml(top3ByHour(h));
+      const tooltipHtml = `
+        <div class="tooltip-title">${h}시</div>
+        <div class="tooltip-line">총 ${escapeHtml(formatTime(time))}</div>
+        <div class="tooltip-line">차단 ${escapeHtml(formatTime(blockedTime))} (${Math.round(blockedPct)}%)</div>
+        ${topHtml}
+      `;
 
       const barWrapper = document.createElement('div');
       barWrapper.className = 'bar-wrapper';
@@ -155,6 +282,7 @@ export function createDetailedRecapTab({ UI, getState }) {
       barStack.className = 'bar-stack';
       barStack.style.height = `${height}%`;
       barStack.dataset.tooltip = tooltip;
+      barStack.dataset.tooltipHtml = tooltipHtml;
 
       const safeSeg = document.createElement('div');
       safeSeg.className = 'bar-segment bar-safe';
@@ -177,11 +305,13 @@ export function createDetailedRecapTab({ UI, getState }) {
 
       UI.dailyGraph?.appendChild(barWrapper);
     });
+
+    renderUsageList(UI.dailyAllSitesList, allDailyItems, { emptyMessage: '오늘 기록이 아직 없어요.' });
   }
 
   function renderWeeklyGraph() {
     const { currentStats, currentBlockedUrls } = getState();
-    const { weekdayData, weekdayBlocked, total, blocked, change } = getWeeklyData(currentStats, currentBlockedUrls);
+    const { weekdayData, weekdayBlocked, weekdayDateStr, total, blocked, change } = getWeeklyData(currentStats, currentBlockedUrls);
 
     if (UI.weeklyTotal) UI.weeklyTotal.textContent = formatTime(total);
     if (UI.weeklyBlocked) UI.weeklyBlocked.textContent = formatTime(blocked);
@@ -199,6 +329,16 @@ export function createDetailedRecapTab({ UI, getState }) {
       UI.weeklyInsight.textContent = peak ? `${base} · 최고 ${peak.label} (${peak.pct}%)` : base;
     }
 
+    const getWeeklyTop3ForDate = (dateStr) => {
+      if (!dateStr) return [];
+      const domains = currentStats?.dates?.[dateStr]?.domains || {};
+      return Object.entries(domains)
+        .map(([domain, d]) => ({ domain, time: d?.active || 0 }))
+        .filter((x) => x.time > 0)
+        .sort((a, b) => b.time - a.time)
+        .slice(0, 3);
+    };
+
     weekdayData.forEach((time, idx) => {
       const height = (time / maxDay) * 100;
       const blockedTime = weekdayBlocked[idx] || 0;
@@ -206,6 +346,13 @@ export function createDetailedRecapTab({ UI, getState }) {
       const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
       const safePct = time > 0 ? (safeTime / time) * 100 : 0;
       const tooltip = `${days[idx]}\n총 ${formatTime(time)}\n차단 ${formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
+      const topHtml = buildTopSitesHtml(getWeeklyTop3ForDate(weekdayDateStr?.[idx] || ''));
+      const tooltipHtml = `
+        <div class="tooltip-title">${escapeHtml(days[idx])}</div>
+        <div class="tooltip-line">총 ${escapeHtml(formatTime(time))}</div>
+        <div class="tooltip-line">차단 ${escapeHtml(formatTime(blockedTime))} (${Math.round(blockedPct)}%)</div>
+        ${topHtml}
+      `;
 
       const barWrapper = document.createElement('div');
       barWrapper.className = 'bar-wrapper';
@@ -215,6 +362,7 @@ export function createDetailedRecapTab({ UI, getState }) {
       barStack.className = 'bar-stack';
       barStack.style.height = `${height}%`;
       barStack.dataset.tooltip = tooltip;
+      barStack.dataset.tooltipHtml = tooltipHtml;
 
       const safeSeg = document.createElement('div');
       safeSeg.className = 'bar-segment bar-safe';
@@ -235,6 +383,31 @@ export function createDetailedRecapTab({ UI, getState }) {
 
       UI.weeklyGraph?.appendChild(barWrapper);
     });
+
+    // 최근 7일 합산(포그라운드) - 전체 도메인 표시
+    const totalsByDomain = new Map();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const domains = currentStats?.dates?.[dateStr]?.domains || {};
+      for (const [domain, data] of Object.entries(domains)) {
+        const prev = totalsByDomain.get(domain) || 0;
+        totalsByDomain.set(domain, prev + (data?.active || 0));
+      }
+    }
+
+    const allWeeklyItems = Array.from(totalsByDomain.entries())
+      .map(([domain, totalTime]) => ({
+        domain,
+        totalTime,
+        timeStr: formatTime(totalTime),
+        isBlocked: currentBlockedUrls.includes(domain),
+      }))
+      .filter((it) => it.totalTime > 0)
+      .sort((a, b) => b.totalTime - a.totalTime);
+
+    renderUsageList(UI.weeklyAllSitesList, allWeeklyItems, { emptyMessage: '최근 7일 기록이 아직 없어요.' });
   }
 
   function setup() {
@@ -250,8 +423,17 @@ export function createDetailedRecapTab({ UI, getState }) {
 
     bindChartTooltip(UI.dailyGraph);
     bindChartTooltip(UI.weeklyGraph);
+
+    const root = document.getElementById('detailed-recap');
+    if (root) {
+      root.addEventListener('click', (e) => {
+        const btn = e.target instanceof Element ? e.target.closest('.list-block-btn') : null;
+        if (!btn || !root.contains(btn)) return;
+        const domain = btn.getAttribute('data-domain') || '';
+        if (domain && typeof onToggleBlockDomain === 'function') onToggleBlockDomain(domain);
+      });
+    }
   }
 
   return { setup, display, setMode };
 }
-
