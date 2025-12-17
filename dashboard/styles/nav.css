@@ -42,31 +42,73 @@
     color: var(--text-main);
 }
 
-/* Dark Mode Toggle Button */
-.dark-mode-toggle-btn {
-    /* nav-btn과 동일한 스타일 상속 가능하면 좋으나, 별도 정의 시 */
-    display: flex; 
-    align-items: center; 
-    width: 100%; 
-    padding: 12px 16px; 
-    margin-bottom: 10px; 
-    border: 1px solid var(--border-color);
-    background: var(--bg-main); 
-    color: var(--text-main); 
-    font-weight: 600;
-    border-radius: var(--radius-md); 
-    cursor: pointer; 
-    transition: all 0.2s;
-}
-.dark-mode-toggle-btn:hover {
-    border-color: var(--accent);
+.sidebar nav {
+    flex-grow: 1; /* 메뉴 영역이 공간을 다 차지하게 해서 footer를 아래로 밀어냄 */
 }
 
-/* Fixed Toggle (우측 하단) */
-.theme-toggle-fixed {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-md);
-    padding: 8px 14px;
-    border-radius: 99px; /* 캡슐 형태 */
+.sidebar-footer {
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+    margin-top: auto;
 }
+
+.theme-switch-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-main);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+/* nav.css 추가 */
+.theme-switch-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-main);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.theme-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+/* 스위치 디자인 커스텀 */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #3f464d;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px; width: 16px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider { background-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(18px); }

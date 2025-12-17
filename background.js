@@ -458,7 +458,7 @@ async function trackAllTabsBatch() {
         if (!hostname || tab.url.startsWith('chrome://') || hostname === chrome.runtime.id) continue;
 
         const isForegroundActive =
-            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : !!tab.active;
+            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : false;
         const prev = hostStates.get(hostname) || { isActive: false };
         if (isForegroundActive) prev.isActive = true;
         hostStates.set(hostname, prev);
@@ -555,6 +555,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         "SETTINGS_UPDATED",
         "SCHEDULE_UPDATED",
         "DEBUG_GET_CACHE",
+        "DEBUG_RESET_STATS",
         "DEBUG_FORCE_SAVE",
         "DEBUG_TRACK_NOW",
         "NUDGE_ACK",
@@ -578,6 +579,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             lastActiveTab: lastActiveTabId 
         });
         return false;
+    }
+
+    if (request.action === "DEBUG_RESET_STATS") {
+        loadStatsCache()
+            .then(async () => {
+                statsCache = { dates: {} };
+                cacheLoaded = true;
+                await chrome.storage.local.set({ stats: statsCache });
+                sendResponse({ success: true });
+            })
+            .catch((e) => {
+                console.error("DEBUG_RESET_STATS failed:", e);
+                sendResponse({ success: false });
+            });
+        return true;
     }
 
     if (request.action === "NUDGE_ACK") {
@@ -618,7 +634,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (tab.url && changeInfo.status === 'complete') {
         const isForegroundActive =
-            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : !!tab.active;
+            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : false;
         await sendFrictionMessage(tabId, tab.url);
         await settleTabTime(tab.url, isForegroundActive, true);
         if (isForegroundActive) {

@@ -95,7 +95,9 @@ export function isFrictionTime(schedule) {
 export function getHostname(url) {
   try {
     const u = new URL(url);
-    // URL 파싱 오류 방지를 위해 유효성 검사 추가 (만약 contentScript.js에서 이미 했다면 생략 가능)
+    // 내부 페이지(edge://newtab 등)나 file/about 스킴이 통계에 섞이면 TOP3/차트에 "이상한 항목"으로 노출될 수 있어,
+    // 사용 시간 추적/차단은 http(s)만 대상으로 제한합니다.
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
     return u.hostname ? u.hostname.replace(/^www\./, "") : null;
   } catch {
     return null;

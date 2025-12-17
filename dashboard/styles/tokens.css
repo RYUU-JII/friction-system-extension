@@ -9,6 +9,8 @@
     --bg-sidebar: #ffffff;
     --accent: #6366f1;
     --accent-hover: #4f46e5;
+    --accent-ring: rgba(99, 102, 241, 0.25);
+    --accent-gradient-to: var(--accent-hover);
     --text-main: #1e293b;
     --text-muted: #64748b;
     --card-bg: #ffffff;
@@ -19,6 +21,33 @@
     /* 기본 상태 컬러 */
     --color-blocked: #dc2626;
     --color-safe: #059669;
+
+    /* 컴포넌트 전용 (버튼 등) */
+    --btn-danger-bg: rgba(220, 38, 38, 0.12);
+    --btn-danger-fg: #b91c1c;
+    --btn-danger-border: rgba(220, 38, 38, 0.24);
+    --btn-danger-hover: rgba(220, 38, 38, 0.18);
+
+    --btn-safe-bg: rgba(5, 150, 105, 0.12);
+    --btn-safe-fg: #047857;
+    --btn-safe-border: rgba(5, 150, 105, 0.22);
+    --btn-safe-hover: rgba(5, 150, 105, 0.18);
+
+    --btn-neutral-bg: rgba(148, 163, 184, 0.16);
+    --btn-neutral-fg: #334155;
+    --btn-neutral-border: rgba(148, 163, 184, 0.28);
+    --btn-neutral-hover: rgba(148, 163, 184, 0.22);
+
+    /* 차트 및 그래프 */
+    --chart-safe: var(--accent);
+    --chart-safe-hover: rgba(99, 102, 241, 0.92);
+    --chart-blocked: var(--color-blocked);
+    --chart-blocked-hover: rgba(220, 38, 38, 0.92);
+    --chart-grid: rgba(148, 163, 184, 0.22);
+
+    --usage-bar-bg: rgba(99, 102, 241, 0.18);
+    --usage-bar-blocked-bg: rgba(220, 38, 38, 0.22);
+    --usage-bar-gradient: linear-gradient(135deg, var(--accent), var(--accent-gradient-to));
 }
 
 /* ============================================================

@@ -11,6 +11,39 @@
     min-height: 680px;
     transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
+/* JS 초기화 전(또는 실패)에는 첫 카드만 표시해서 레이아웃 붕괴를 막습니다. */
+body:not(.js-enabled) .overview-carousel-track .overview-slide:not(:first-child) {
+    display: none;
+}
+
+/* Carousel animation/visibility is controlled by JS via .js-enabled + .is-active/.is-prev/.is-next */
+.js-enabled .overview-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    opacity: 0;
+    transform: translateX(34px);
+    pointer-events: none;
+    transition: opacity 0.30s ease, transform 0.38s ease;
+    will-change: opacity, transform;
+}
+.js-enabled .overview-slide.is-active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+.js-enabled .overview-slide.is-prev {
+    opacity: 0;
+    transform: translateX(-34px);
+}
+.js-enabled .overview-slide.is-next {
+    opacity: 0;
+    transform: translateX(34px);
+}
+.js-enabled .overview-slide.is-immediate {
+    transition: none;
+}
 
 .overview-slide {
     padding: 32px;
@@ -138,11 +171,10 @@
 }
 
 .stats-group {
-    text-align: right;
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
 }
 
 .time {

@@ -104,6 +104,18 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function isDisplayableDomain(domain) {
+  const d = String(domain ?? '').trim();
+  if (!d) return false;
+  if (d === 'null' || d === 'undefined') return false;
+  if (d.includes(' ')) return false;
+  // Stats should only contain hostnames, but guard against internal placeholders creeping in.
+  if (d.includes('/') || d.includes(':')) return false;
+  // Allow localhost explicitly; otherwise prefer "real" hostnames to avoid edge://newtab-style noise in old data.
+  if (d === 'localhost') return true;
+  return d.includes('.');
+}
+
 function faviconUrl(domain) {
   const d = String(domain || '').trim();
   if (!d) return '';
@@ -241,6 +253,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
     const domains = currentStats?.dates?.[dateStr]?.domains || {};
 
     const allDailyItems = Object.entries(domains)
+      .filter(([domain]) => isDisplayableDomain(domain))
       .map(([domain, domainData]) => {
         const totalTime = domainData?.active || 0;
         return {
@@ -255,6 +268,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
 
     const top3ByHour = (hourIdx) =>
       Object.entries(domains)
+        .filter(([domain]) => isDisplayableDomain(domain))
         .map(([domain, domainData]) => ({ domain, time: getDomainHourlyActive(domainData, hourIdx) }))
         .filter((x) => x.time > 0)
         .sort((a, b) => b.time - a.time)
@@ -296,12 +310,11 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
       barStack.appendChild(safeSeg);
       barWrapper.appendChild(barStack);
 
-      if (h % 3 === 0) {
-        const label = document.createElement('div');
-        label.className = 'bar-label';
-        label.textContent = String(h);
-        barWrapper.appendChild(label);
-      }
+      const label = document.createElement('div');
+      label.className = 'bar-label';
+      if (h % 3 === 0) label.textContent = String(h);
+      else label.classList.add('is-empty');
+      barWrapper.appendChild(label);
 
       UI.dailyGraph?.appendChild(barWrapper);
     });
@@ -333,6 +346,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
       if (!dateStr) return [];
       const domains = currentStats?.dates?.[dateStr]?.domains || {};
       return Object.entries(domains)
+        .filter(([domain]) => isDisplayableDomain(domain))
         .map(([domain, d]) => ({ domain, time: d?.active || 0 }))
         .filter((x) => x.time > 0)
         .sort((a, b) => b.time - a.time)
