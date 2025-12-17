@@ -7,14 +7,6 @@
     <link rel="stylesheet" href="dashboard.css" />
   </head>
   <body>
-    <div class="theme-toggle-fixed" role="group" aria-label="테마 설정">
-      <span class="theme-toggle-label">다크모드</span>
-      <label class="switch" aria-label="다크모드 토글">
-        <input type="checkbox" id="darkModeToggle" />
-        <span class="slider"></span>
-      </label>
-    </div>
-
     <div class="sidebar">
       <h2>Friction</h2>
       <nav>
@@ -24,6 +16,15 @@
         <button class="nav-btn" data-tab="settings"><span>&#9881;</span> 필터 설정</button>
         <button class="nav-btn" data-tab="schedule"><span>&#9200;</span> 스케줄</button>
       </nav>
+      <div class="sidebar-footer">
+        <div class="theme-switch-wrapper">
+          <span class="theme-label">🌙 다크 모드</span>
+          <label class="switch">
+            <input type="checkbox" id="darkModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
 
     <div class="main-content">
@@ -251,6 +252,7 @@
           <div class="nudge-debug-actions">
             <button id="nudgeSpawnBtn" class="primary-btn" type="button">스폰</button>
             <button id="nudgeStopBtn" class="primary-btn nudge-debug-stop" type="button">정지</button>
+            <button id="resetStatsBtn" class="primary-btn nudge-debug-stop" type="button">테스트: 통계 초기화</button>
             <span id="nudgeDebugStatus" class="nudge-debug-status"></span>
           </div>
         </div>
@@ -292,6 +294,8 @@
             <div class="slider-handle" id="handle-end"></div>
           </div>
         </div>
+
+        
       </section>
     </div>
 

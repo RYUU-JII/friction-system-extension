@@ -1,94 +1,107 @@
+/* tokens.css */
 :root {
-    /* Color Palette - Light Mode */
+    /* 공통 변수 (크기, 반경 등) */
+    --radius-md: 12px;
+    --radius-lg: 16px; /* 노르딕은 조금 더 단단한 느낌을 위해 16px 선호 */
+    
+    /* 기본 라이트 모드 (기존 유지) */
     --bg-main: #f8fafc;
     --bg-sidebar: #ffffff;
-    --accent: #6366f1; /* Indigo */
+    --accent: #6366f1;
     --accent-hover: #4f46e5;
+    --accent-ring: rgba(99, 102, 241, 0.25);
+    --accent-gradient-to: var(--accent-hover);
     --text-main: #1e293b;
     --text-muted: #64748b;
     --card-bg: #ffffff;
     --border-color: #e2e8f0;
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-    --radius-md: 12px;
-    --radius-lg: 18px;
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
     
-    /* Stats Colors */
-    --color-blocked: #dc2626; /* Red-600 */
-    --color-safe: #059669; /* Emerald-600 */
+    /* 기본 상태 컬러 */
+    --color-blocked: #dc2626;
+    --color-safe: #059669;
 
-    /* Semantic button colors */
-    --btn-danger-bg: var(--color-blocked);
-    --btn-danger-hover: #b91c1c; /* Red-700 */
-    --btn-danger-fg: #ffffff;
-    --btn-danger-border: transparent;
+    /* 컴포넌트 전용 (버튼 등) */
+    --btn-danger-bg: rgba(220, 38, 38, 0.12);
+    --btn-danger-fg: #b91c1c;
+    --btn-danger-border: rgba(220, 38, 38, 0.24);
+    --btn-danger-hover: rgba(220, 38, 38, 0.18);
 
-    --btn-safe-bg: var(--color-safe);
-    --btn-safe-hover: #047857; /* Emerald-700 */
-    --btn-safe-fg: #ffffff;
-    --btn-safe-border: transparent;
-
-    --btn-neutral-bg: #e2e8f0; /* Slate-200 */
-    --btn-neutral-hover: #cbd5e1; /* Slate-300 */
-    --btn-neutral-fg: #334155; /* Slate-700 */
-    --btn-neutral-border: #cbd5e1;
-
-    /* UI accents */
-    --usage-bar-bg: rgba(99, 102, 241, 0.10);
-    --usage-bar-blocked-bg: rgba(220, 38, 38, 0.12);
-    --usage-bar-gradient: linear-gradient(90deg, rgba(99, 102, 241, 0.20), rgba(139, 92, 246, 0.12));
-    --accent-gradient-to: #8b5cf6; /* Violet-500 */
-    --accent-ring: rgba(99, 102, 241, 0.20);
-
-    /* Charts */
-    --chart-safe: rgba(99, 102, 241, 0.75);
-    --chart-safe-hover: rgba(99, 102, 241, 0.92);
-    --chart-blocked: rgba(220, 38, 38, 0.85);
-    --chart-blocked-hover: rgba(220, 38, 38, 0.95);
-    --chart-grid: rgba(148, 163, 184, 0.25);
-}
-
-body.dark {
-    /* Color Palette - Dark Mode */
-    --bg-main: #0f172a;
-    --bg-sidebar: #1e293b;
-    --accent: #818cf8; /* Lighter Indigo */
-    --accent-hover: #6366f1;
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --card-bg: #1e293b;
-    --border-color: #334155;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
-    --color-blocked: #f43f5e; /* Rose-500 */
-    --color-safe: #10b981; /* Emerald-500 */
-
-    /* Dark mode: keep meaning but reduce saturation via tinted buttons */
-    --btn-danger-bg: rgba(244, 63, 94, 0.18);
-    --btn-danger-hover: rgba(244, 63, 94, 0.26);
-    --btn-danger-fg: #fecdd3; /* Rose-200 */
-    --btn-danger-border: rgba(244, 63, 94, 0.35);
-
-    --btn-safe-bg: rgba(16, 185, 129, 0.16);
-    --btn-safe-hover: rgba(16, 185, 129, 0.24);
-    --btn-safe-fg: #a7f3d0; /* Emerald-200 */
-    --btn-safe-border: rgba(16, 185, 129, 0.32);
+    --btn-safe-bg: rgba(5, 150, 105, 0.12);
+    --btn-safe-fg: #047857;
+    --btn-safe-border: rgba(5, 150, 105, 0.22);
+    --btn-safe-hover: rgba(5, 150, 105, 0.18);
 
     --btn-neutral-bg: rgba(148, 163, 184, 0.16);
-    --btn-neutral-hover: rgba(148, 163, 184, 0.24);
-    --btn-neutral-fg: #e2e8f0; /* Slate-200 */
+    --btn-neutral-fg: #334155;
     --btn-neutral-border: rgba(148, 163, 184, 0.28);
+    --btn-neutral-hover: rgba(148, 163, 184, 0.22);
 
-    --usage-bar-bg: rgba(129, 140, 248, 0.14);
-    --usage-bar-blocked-bg: rgba(244, 63, 94, 0.18);
-    --usage-bar-gradient: linear-gradient(90deg, rgba(129, 140, 248, 0.22), rgba(139, 92, 246, 0.14));
-    --accent-gradient-to: rgba(139, 92, 246, 0.85);
-    --accent-ring: rgba(129, 140, 248, 0.22);
+    /* 차트 및 그래프 */
+    --chart-safe: var(--accent);
+    --chart-safe-hover: rgba(99, 102, 241, 0.92);
+    --chart-blocked: var(--color-blocked);
+    --chart-blocked-hover: rgba(220, 38, 38, 0.92);
+    --chart-grid: rgba(148, 163, 184, 0.22);
 
-    --chart-safe: rgba(129, 140, 248, 0.55);
-    --chart-safe-hover: rgba(129, 140, 248, 0.72);
-    --chart-blocked: rgba(244, 63, 94, 0.65);
-    --chart-blocked-hover: rgba(244, 63, 94, 0.82);
-    --chart-grid: rgba(148, 163, 184, 0.18);
+    --usage-bar-bg: rgba(99, 102, 241, 0.18);
+    --usage-bar-blocked-bg: rgba(220, 38, 38, 0.22);
+    --usage-bar-gradient: linear-gradient(135deg, var(--accent), var(--accent-gradient-to));
 }
 
+/* ============================================================
+   THEME: NORDIC DARK (Body에 dark 클래스가 붙을 때 적용)
+   ============================================================ */
+body.dark {
+    /* 1. 배경 및 서피스 - 깊은 숲과 돌의 색 */
+    --bg-main: #1a1c1e;          /* Deep Charcoal */
+    --bg-sidebar: #202326;       /* Slightly lighter charcoal */
+    --card-bg: #24282c;          /* Matte Surface */
+    
+    /* 2. 텍스트 - 눈이 편안한 오프화이트 */
+    --text-main: #e2e4e9;
+    --text-muted: #9199a5;
+    
+    /* 3. 액센트 (노르딕의 핵심) - 세이지 그린 */
+    --accent: #8aad94;           /* Sage Green */
+    --accent-hover: #72967d;     /* Deep Sage */
+    --accent-ring: rgba(138, 173, 148, 0.25);
+    --accent-gradient-to: #5c7a67; /* 보조 그라데이션 */
+    
+    /* 4. 상태 컬러 (채도를 낮춘 파스텔톤) */
+    --color-blocked: #d48a8a;    /* Dusty Rose (Red 대체) */
+    --color-safe: #a3be8c;       /* Olive Green (Green 대체) */
+    
+    /* 5. 테두리 및 그림자 (매트한 질감) */
+    --border-color: rgba(255, 255, 255, 0.06);
+    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.2); /* 부드러운 그림자 */
+    --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.3);
+    
+    /* 6. 컴포넌트 전용 (버튼 등) */
+    --btn-danger-bg: rgba(212, 138, 138, 0.15);
+    --btn-danger-fg: #eebbbb;
+    --btn-danger-border: rgba(212, 138, 138, 0.3);
+    --btn-danger-hover: rgba(212, 138, 138, 0.25);
+
+    --btn-safe-bg: rgba(163, 190, 140, 0.15);
+    --btn-safe-fg: #cbe0b8;
+    --btn-safe-border: rgba(163, 190, 140, 0.3);
+    --btn-safe-hover: rgba(163, 190, 140, 0.25);
+
+    --btn-neutral-bg: #2d3238;
+    --btn-neutral-fg: #dcdfe4;
+    --btn-neutral-border: rgba(255, 255, 255, 0.08);
+    --btn-neutral-hover: #363c44;
+
+    /* 7. 차트 및 그래프 */
+    --chart-safe: #8aad94;
+    --chart-safe-hover: #9bbba4;
+    --chart-blocked: #d48a8a;
+    --chart-blocked-hover: #e09b9b;
+    --chart-grid: rgba(255, 255, 255, 0.05);
+
+    --usage-bar-bg: rgba(255, 255, 255, 0.05);
+    --usage-bar-blocked-bg: rgba(212, 138, 138, 0.2);
+    --usage-bar-gradient: linear-gradient(135deg, var(--accent), var(--accent-gradient-to));
+}

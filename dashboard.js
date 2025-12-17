@@ -116,6 +116,7 @@ function initDOMReferences() {
   UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
   UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');
   UI.nudgeStopBtn = document.getElementById('nudgeStopBtn');
+  UI.resetStatsBtn = document.getElementById('resetStatsBtn');
   UI.nudgeDebugStatus = document.getElementById('nudgeDebugStatus');
   UI.nudgeSizeRange = document.getElementById('nudgeSizeRange');
   UI.nudgeSizeOutput = document.getElementById('nudgeSizeOutput');
@@ -278,6 +279,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const isDark = !!UI.darkModeToggle.checked;
       document.body.classList.toggle('dark', isDark);
       chrome.storage.local.set({ darkMode: isDark }, () => renderActiveTab());
+    });
+  }
+
+  if (UI.resetStatsBtn) {
+    UI.resetStatsBtn.addEventListener('click', () => {
+      if (!window.confirm('테스트용: 모든 사용 통계를 초기화할까요?')) return;
+
+      const setStatus = (msg) => {
+        if (UI.nudgeDebugStatus) UI.nudgeDebugStatus.textContent = msg;
+        if (UI.saveStatus) UI.saveStatus.textContent = msg;
+      };
+
+      setStatus('초기화 중...');
+      chrome.runtime.sendMessage({ action: 'DEBUG_RESET_STATS' }, (resp) => {
+        if (chrome.runtime.lastError) {
+          setStatus('초기화 실패');
+          return;
+        }
+        if (!resp || resp.success !== true) {
+          setStatus('초기화 실패');
+          return;
+        }
+        currentStats = { dates: {} };
+        setStatus('초기화 완료');
+        renderActiveTab();
+      });
     });
   }
 

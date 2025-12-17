@@ -1,38 +1,89 @@
-/* Tab Content */
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+/* shared.css */
+
+/* --- 탭 제어 (가장 중요: HTML 복구의 핵심) --- */
+.tab-content { 
+    display: none; 
+}
+.tab-content.active { 
+    display: block !important; 
+}
 
 .is-hidden { display: none !important; }
 
+/* --- 노르딕 스타일 섹션 (Reveal Section) --- */
 .reveal-section {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    padding: 18px;
+    padding: 24px; /* 여백을 조금 더 넓혀서 노르딕의 여유로움을 줌 */
+    margin-bottom: 24px;
 }
+
 .js-enabled .reveal-section {
     opacity: 0;
     transform: translateY(14px);
-    transition: opacity 0.35s ease, transform 0.35s ease;
+    transition: opacity 0.4s ease, transform 0.4s ease;
 }
+
 .js-enabled .reveal-section.is-visible {
     opacity: 1;
     transform: translateY(0);
 }
 
 .reveal-section .recap-header {
-    margin: 0 0 12px;
+    margin: 0 0 16px;
 }
+
 .section-desc {
     margin: 6px 0 0;
     color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.45;
+    font-size: 13.5px;
+    line-height: 1.5;
 }
 
+/* Detailed recap mode toggle (daily/weekly) */
+.recap-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.recap-mode-toggle .sort-options {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.recap-mode-toggle button {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-main);
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.recap-mode-toggle button:hover {
+    background: var(--btn-neutral-hover);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+.recap-mode-toggle .sort-options button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+body.dark .recap-mode-toggle .sort-options button.active {
+    color: #1a1c1e;
+}
+
+/* --- 공통 요소 (노르딕 매트 스타일) --- */
 .empty-state {
-    padding: 14px;
+    padding: 24px;
     border: 1px dashed var(--border-color);
     border-radius: var(--radius-md);
     color: var(--text-muted);
@@ -41,25 +92,61 @@
     font-weight: 600;
     font-size: 13px;
 }
+
+/* 버튼 공통 스타일 (tokens.css 변수 활용) */
 .list-block-btn {
     background: var(--btn-danger-bg);
     color: var(--btn-danger-fg);
     border: 1px solid var(--btn-danger-border);
-    padding: 8px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
-    font-size: 0.95em;
+    padding: 6px 14px;
+    border-radius: 8px;
     font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
 }
-.list-block-btn:hover { background: var(--btn-danger-hover); }
+
+.list-block-btn:hover {
+    background: var(--btn-danger-hover);
+}
+
 .list-block-btn.is-blocked {
     background: var(--btn-neutral-bg);
     color: var(--btn-neutral-fg);
     border-color: var(--btn-neutral-border);
 }
-.list-block-btn.is-blocked:hover { background: var(--btn-neutral-hover); }
+.list-block-btn.is-blocked:hover {
+    background: var(--btn-neutral-hover);
+}
 .list-block-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+}
+
+/* Date input */
+.date-input {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-main);
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    line-height: 1.2;
+    min-height: 38px;
+    box-shadow: var(--shadow-sm);
+}
+.date-input.is-inline {
+    min-width: 160px;
+}
+body.dark .date-input {
+    color-scheme: dark;
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+    opacity: 0.75;
+    cursor: pointer;
+}
+body.dark .date-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.85;
 }
