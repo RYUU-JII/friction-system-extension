@@ -3,40 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Friction</title>
+    <title>Friction Popup</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <header class="popup-header">
       <div class="popup-brand">
         <div class="popup-title">Friction</div>
-        <div class="popup-subtitle">현재 사이트를 빠르게 차단</div>
+        <div class="popup-subtitle">Focus on what matters</div>
       </div>
-      <div class="popup-status" id="siteStatus" aria-live="polite">로딩 중…</div>
+      <div class="popup-status" id="siteStatus">Checking...</div>
     </header>
 
     <main class="popup-main">
-      <div class="site-card" role="group" aria-label="현재 사이트">
+      <div class="site-card">
         <div class="site-identity">
-          <div class="site-icon" aria-hidden="true">
+          <div class="site-icon">
             <img id="siteFavicon" class="site-favicon" alt="" />
           </div>
           <div class="site-meta">
-            <div class="site-label">현재 사이트</div>
+            <div class="site-label">CURRENT SITE</div>
             <div class="site-domain" id="siteDomain">—</div>
           </div>
         </div>
         <div class="site-hint" id="siteHint"></div>
       </div>
 
-      <div class="btn-stack" role="group" aria-label="동작">
-        <button id="openDashboard" class="btn btn-primary" type="button">대시보드 열기</button>
-        <button id="quickBlock" class="btn btn-secondary" type="button">현재 사이트 차단</button>
+      <div class="btn-stack">
+        <button id="quickBlockBtn" class="btn btn-primary">현재 사이트 차단</button>
+        <button id="openDashboard" class="btn btn-secondary">대시보드 열기</button>
       </div>
-
-      <div id="msg" class="popup-msg" role="status" aria-live="polite"></div>
+      <div id="msg" class="site-hint" style="text-align: center; margin-top: 8px;"></div>
     </main>
 
-    <script src="popup_launcher.js" type="module"></script>
+    <script src="popup_launcher.js"></script>
   </body>
 </html>
