@@ -1,64 +1,72 @@
-/* Navigation */
+/* nav.css */
 .nav-btn {
-    display: flex; align-items: center; width: 100%; padding: 12px 15px; margin-bottom: 10px; border: none;
-    background: transparent; color: var(--text-muted); text-align: left; font-size: 16px; font-weight: 500;
-    border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s, color 0.2s;
+    display: flex; 
+    align-items: center; 
+    width: 100%; 
+    padding: 12px 16px; 
+    margin-bottom: 8px; 
+    border: 1px solid transparent; /* 테두리 공간 확보 */
+    background: transparent; 
+    color: var(--text-muted); 
+    text-align: left; 
+    font-size: 15px; 
+    font-weight: 600;
+    border-radius: var(--radius-md); 
+    cursor: pointer; 
+    transition: all 0.2s ease;
 }
+
 .nav-btn span {
     width: 1.6em;
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    margin-right: 10px;
-    font-size: 1.2em;
-    line-height: 1;
-    flex: 0 0 auto;
+    margin-right: 12px;
+    font-size: 1.1em;
+    color: var(--text-muted); /* 아이콘 색상도 통일 */
+    transition: color 0.2s;
 }
-.nav-btn.active { background: var(--accent); color: white; }
-.nav-btn.active:hover { background: var(--accent-hover); }
 
-/* 다크 모드 토글 버튼 전용 스타일 추가 (nav-btn과 분리) */
+/* Active State: 노르딕 스타일 (배경은 연하게, 글자는 진하게) */
+.nav-btn.active { 
+    background: var(--btn-neutral-bg); 
+    color: var(--accent); 
+    border-color: var(--border-color);
+}
+.nav-btn.active span {
+    color: var(--accent);
+}
+
+.nav-btn:hover:not(.active) { 
+    background: var(--bg-main); 
+    color: var(--text-main);
+}
+
+/* Dark Mode Toggle Button */
 .dark-mode-toggle-btn {
-    display: flex; align-items: center; width: 100%; padding: 12px 15px; margin-bottom: 10px; border: none;
-    background: transparent; color: var(--text-main); text-align: left; font-size: 16px; font-weight: 500;
-    border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s, color 0.2s;
-}
-.dark-mode-toggle-btn:hover { background: var(--border-color); }
-.dark-mode-toggle-btn span { margin-right: 10px; font-size: 1.2em; }
-
-body.dark .dark-mode-toggle-btn { 
+    /* nav-btn과 동일한 스타일 상속 가능하면 좋으나, 별도 정의 시 */
+    display: flex; 
+    align-items: center; 
+    width: 100%; 
+    padding: 12px 16px; 
+    margin-bottom: 10px; 
+    border: 1px solid var(--border-color);
+    background: var(--bg-main); 
     color: var(--text-main); 
-    background: var(--bg-sidebar);
+    font-weight: 600;
+    border-radius: var(--radius-md); 
+    cursor: pointer; 
+    transition: all 0.2s;
 }
-body.dark .dark-mode-toggle-btn:hover { 
-    background: var(--border-color); 
+.dark-mode-toggle-btn:hover {
+    border-color: var(--accent);
 }
 
-/* Theme Toggle (fixed top-right) */
+/* Fixed Toggle (우측 하단) */
 .theme-toggle-fixed {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    z-index: 50;
-
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    padding: 10px 12px;
-    border-radius: var(--radius-md);
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
-}
-.theme-toggle-label {
-    font-weight: 600;
-    color: var(--text-main);
-    user-select: none;
-}
-@media (max-width: 720px) {
-    .theme-toggle-fixed {
-        left: 12px;
-        bottom: 12px;
-    }
+    padding: 8px 14px;
+    border-radius: 99px; /* 캡슐 형태 */
 }
