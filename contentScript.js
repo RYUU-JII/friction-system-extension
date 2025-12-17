@@ -52,9 +52,9 @@ const SELECTORS = {
     // INTERACTIVE_TARGETS는 네비게이션 및 인터랙션 요소를 포괄하도록 확장되었습니다.
     INTERACTIVE_TARGETS: ':is(a, button, article, [onclick], input[type="submit"], input[type="image"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="article"], [role="menuitem"], [role="option"], [role="tab"], [class*="link"], [class*="button"], [class*="btn"], figure):not(.stickyunit)',
     
-    TEXT_LAYOUT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a)',
-    TEXT_VISUAL_TARGETS: ':is(span:not([role]), a:not(:has(img, video, canvas, svg)), p:not(:has(img, video, canvas, svg)), li:not(:has(img, video, canvas, svg)), h1:not(:has(img, video, canvas, svg)), h2:not(:has(img, video, canvas, svg)), h3:not(:has(img, video, canvas, svg)), h4:not(:has(img, video, canvas, svg)), h5:not(:has(img, video, canvas, svg)), h6:not(:has(img, video, canvas, svg)), blockquote:not(:has(img, video, canvas, svg)))',
-    TEXT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a)'
+    TEXT_LAYOUT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])',
+    TEXT_VISUAL_TARGETS: ':is(span:not([role]), span[role="text"], a:not(:has(img, video, canvas, svg)), p:not(:has(img, video, canvas, svg)), li:not(:has(img, video, canvas, svg)), h1:not(:has(img, video, canvas, svg)), h2:not(:has(img, video, canvas, svg)), h3:not(:has(img, video, canvas, svg)), h4:not(:has(img, video, canvas, svg)), h5:not(:has(img, video, canvas, svg)), h6:not(:has(img, video, canvas, svg)), blockquote:not(:has(img, video, canvas, svg)))',
+    TEXT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])'
 };
 
 // ===========================================================
@@ -73,17 +73,24 @@ const removeRootAttribute = (attr) => {
 
 const VisualManager = {
     _videoContainers: new Set(),
+    _videoHoverScopes: new Set(),
     _videoObserver: null,
+    _trackVideoContainers: false,
 
     _clearVideoContainers() {
         for (const el of this._videoContainers) {
             try { el.removeAttribute('data-friction-video-container'); } catch (e) {}
         }
         this._videoContainers.clear();
+        for (const el of this._videoHoverScopes) {
+            try { el.removeAttribute('data-friction-video-hover-scope'); } catch (e) {}
+        }
+        this._videoHoverScopes.clear();
         if (this._videoObserver) {
             try { this._videoObserver.disconnect(); } catch (e) {}
             this._videoObserver = null;
         }
+        this._trackVideoContainers = false;
     },
 
     _markVideoContainer(videoEl) {
@@ -93,8 +100,70 @@ const VisualManager = {
         this._videoContainers.add(parent);
     },
 
-    _ensureVideoContainerTracking() {
-        document.querySelectorAll('video').forEach((v) => this._markVideoContainer(v));
+    _markVideoHoverScope(videoEl) {
+        if (!videoEl || !(videoEl instanceof Element)) return;
+
+        let videoRect = null;
+        try {
+            videoRect = videoEl.getBoundingClientRect();
+        } catch (_) {
+            // ignore
+        }
+
+        const mark = (el) => {
+            if (!el || el === document.documentElement || el === document.body) return false;
+            try { el.setAttribute('data-friction-video-hover-scope', '1'); } catch (e) { return false; }
+            this._videoHoverScopes.add(el);
+            return true;
+        };
+
+        const parent = videoEl.parentElement;
+        if (!parent || parent === document.documentElement || parent === document.body) return;
+        mark(parent);
+
+        let current = parent.parentElement;
+        let markedExtra = 0;
+        while (current && markedExtra < 2 && current !== document.documentElement && current !== document.body) {
+            if (!videoRect || !videoRect.width || !videoRect.height) break;
+
+            let rect = null;
+            try {
+                rect = current.getBoundingClientRect();
+            } catch (_) {
+                break;
+            }
+            if (!rect || !rect.width || !rect.height) break;
+
+            const videoArea = videoRect.width * videoRect.height;
+            const currentArea = rect.width * rect.height;
+
+            const areaOk = currentArea <= videoArea * 3;
+            const widthOk = rect.width <= videoRect.width * 1.8;
+            const heightOk = rect.height <= videoRect.height * 2.2;
+            if (!areaOk || !widthOk || !heightOk) break;
+
+            mark(current);
+            markedExtra += 1;
+            current = current.parentElement;
+        }
+    },
+
+    _markVideoTracking(videoEl) {
+        this._markVideoHoverScope(videoEl);
+        if (this._trackVideoContainers) this._markVideoContainer(videoEl);
+    },
+
+    _ensureVideoContainerTracking({ trackContainers } = {}) {
+        const nextTrackContainers = !!trackContainers;
+        if (!nextTrackContainers && this._videoContainers.size > 0) {
+            for (const el of this._videoContainers) {
+                try { el.removeAttribute('data-friction-video-container'); } catch (e) {}
+            }
+            this._videoContainers.clear();
+        }
+        this._trackVideoContainers = nextTrackContainers;
+
+        document.querySelectorAll('video').forEach((v) => this._markVideoTracking(v));
 
         if (this._videoObserver) return;
         this._videoObserver = new MutationObserver((mutations) => {
@@ -102,11 +171,12 @@ const VisualManager = {
                 for (const node of m.addedNodes || []) {
                     if (!(node instanceof Element)) continue;
                     if (node.tagName === 'VIDEO') {
-                        this._markVideoContainer(node);
+                        this._markVideoTracking(node);
                         continue;
                     }
                     if (!node.querySelectorAll) continue;
-                    node.querySelectorAll('video').forEach((v) => this._markVideoContainer(v));
+                    node.querySelectorAll('video').forEach((v) => this._markVideoTracking(v));
+
                 }
             }
         });
@@ -155,8 +225,11 @@ const VisualManager = {
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const opacityRule = mediaOpacity && mediaOpacity.isActive ? `opacity: ${mediaOpacity.value} !important;` : '';
 
+        const shouldTrackVideoHoverScopes = baseFilterValues.length > 0;
         const shouldTrackVideoContainers = !!(mediaBrightness && mediaBrightness.isActive) || !!(mediaOpacity && mediaOpacity.isActive);
-        if (shouldTrackVideoContainers) this._ensureVideoContainerTracking();
+        if (shouldTrackVideoHoverScopes || shouldTrackVideoContainers) {
+            this._ensureVideoContainerTracking({ trackContainers: shouldTrackVideoContainers });
+        }
         else this._clearVideoContainers();
 
         style.textContent = `
@@ -165,6 +238,12 @@ const VisualManager = {
                 ${opacityRule}
                 transition: filter 0.1s ease, opacity 0.1s ease;
                 /* will-change: filter; 제거 */
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:hover ${SELECTORS.VISUAL_VIDEO_TARGETS} {
+                filter: none !important;
+            }
+            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:has(:hover) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
+                filter: none !important;
             }
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
                 filter: ${videoLeafFilter} !important;
@@ -273,6 +352,20 @@ const TextManager = {
         const blurValue = textBlur && textBlur.isActive ? textBlur.value : null;
         const shadowValue = textShadow && textShadow.isActive ? textShadow.value : null;
 
+        const hoverResetRules = (() => {
+            const parts = [];
+            if (opacityValue) parts.push('opacity: 1 !important;');
+            if (blurValue) parts.push('filter: none !important;');
+            if (shadowValue) parts.push('text-shadow: none !important;');
+            if (parts.length === 0) return '';
+            return `
+                ${SELECTORS.TEXT_VISUAL_TARGETS}:hover,
+                ${SELECTORS.TEXT_VISUAL_TARGETS}:has(:hover) {
+                    ${parts.join('\n                    ')}
+                }
+            `;
+        })();
+
         const visualTextRules = (opacityValue || blurValue || shadowValue)
             ? `
                 ${SELECTORS.TEXT_VISUAL_TARGETS} {
@@ -281,6 +374,7 @@ const TextManager = {
                     ${shadowValue ? `text-shadow: ${shadowValue} !important;` : ''}
                     transition: opacity 0.15s ease, filter 0.15s ease, text-shadow 0.15s ease;
                 }
+                ${hoverResetRules}
             `
             : '';
 
@@ -346,6 +440,11 @@ const TextShuffleManager = {
     touchedElements: new Set(),
     touchedNodes: new Set(),
     originalTextByNode: new WeakMap(),
+    shuffledTextByNode: new WeakMap(),
+    hoverActiveRoot: null,
+    hoverActiveNodes: new Set(),
+    boundPointerOver: null,
+    boundPointerOut: null,
     observer: null,
     debounceTimer: null,
     pendingSubtrees: new Set(),
@@ -366,6 +465,7 @@ const TextShuffleManager = {
         this.strength = normalizedStrength;
         this.maybeShieldInitialPaint();
         this.applyAll();
+        this.enableHoverPreview();
         this.ensureObserver();
         this.initialPassDone = true;
     },
@@ -379,6 +479,85 @@ const TextShuffleManager = {
         this.teardownObserver();
         this.removeInitialPaintShield();
         this.restoreAll();
+    },
+
+    enableHoverPreview() {
+        if (this.boundPointerOver || this.boundPointerOut) return;
+
+        this.boundPointerOver = (e) => {
+            if (!this.enabled) return;
+            const target = e?.target;
+            const targetEl =
+                target instanceof Element ? target : (target && target.parentElement ? target.parentElement : null);
+            const root = targetEl ? targetEl.closest('[data-friction-shuffled="1"]') : null;
+
+            if (!root) {
+                this._clearHoverPreview();
+                return;
+            }
+
+            if (this.hoverActiveRoot === root) return;
+
+            this._clearHoverPreview();
+            this._applyHoverPreview(root);
+        };
+
+        this.boundPointerOut = (e) => {
+            if (!this.hoverActiveRoot) return;
+
+            const from = e?.target instanceof Node ? e.target : null;
+            if (!from || !this.hoverActiveRoot.contains(from)) return;
+
+            const to = e?.relatedTarget instanceof Node ? e.relatedTarget : null;
+            if (to && this.hoverActiveRoot.contains(to)) return;
+
+            this._clearHoverPreview();
+        };
+
+        document.addEventListener('pointerover', this.boundPointerOver, true);
+        document.addEventListener('pointerout', this.boundPointerOut, true);
+    },
+
+    disableHoverPreview() {
+        if (this.boundPointerOver) {
+            document.removeEventListener('pointerover', this.boundPointerOver, true);
+            this.boundPointerOver = null;
+        }
+        if (this.boundPointerOut) {
+            document.removeEventListener('pointerout', this.boundPointerOut, true);
+            this.boundPointerOut = null;
+        }
+        this._clearHoverPreview();
+    },
+
+    _applyHoverPreview(rootEl) {
+        if (!rootEl || !(rootEl instanceof Element)) return;
+
+        this.hoverActiveRoot = rootEl;
+        this.hoverActiveNodes.clear();
+
+        const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+        while (true) {
+            const node = walker.nextNode();
+            if (!node) break;
+            const original = this.originalTextByNode.get(node);
+            const shuffled = this.shuffledTextByNode.get(node);
+            if (typeof original !== 'string' || typeof shuffled !== 'string') continue;
+            node.nodeValue = original;
+            this.hoverActiveNodes.add(node);
+        }
+    },
+
+    _clearHoverPreview() {
+        if (this.hoverActiveNodes.size > 0) {
+            for (const node of Array.from(this.hoverActiveNodes)) {
+                if (!node || !node.isConnected) continue;
+                const shuffled = this.shuffledTextByNode.get(node);
+                if (typeof shuffled === 'string') node.nodeValue = shuffled;
+            }
+        }
+        this.hoverActiveNodes.clear();
+        this.hoverActiveRoot = null;
     },
 
     ensureObserver() {
@@ -410,6 +589,7 @@ const TextShuffleManager = {
     },
 
     restoreAll() {
+        this._clearHoverPreview();
         for (const node of Array.from(this.touchedNodes)) {
             if (!node || !node.isConnected) {
                 this.touchedNodes.delete(node);
@@ -420,6 +600,7 @@ const TextShuffleManager = {
         }
         this.touchedNodes.clear();
         this.originalTextByNode = new WeakMap();
+        this.shuffledTextByNode = new WeakMap();
 
         for (const el of Array.from(this.touchedElements)) {
             if (!el || !el.isConnected) {
@@ -576,6 +757,7 @@ const TextShuffleManager = {
             parts[wordSlots[i]] = words[i];
         }
         node.nodeValue = parts.join('');
+        this.shuffledTextByNode.set(node, node.nodeValue);
 
         if (parent instanceof HTMLElement) {
             parent.setAttribute('data-friction-shuffled', '1');
