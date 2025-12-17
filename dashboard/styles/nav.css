@@ -4,7 +4,16 @@
     background: transparent; color: var(--text-muted); text-align: left; font-size: 16px; font-weight: 500;
     border-radius: var(--radius-md); cursor: pointer; transition: background 0.2s, color 0.2s;
 }
-.nav-btn span { margin-right: 10px; font-size: 1.2em; }
+.nav-btn span {
+    width: 1.6em;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: 10px;
+    font-size: 1.2em;
+    line-height: 1;
+    flex: 0 0 auto;
+}
 .nav-btn.active { background: var(--accent); color: white; }
 .nav-btn.active:hover { background: var(--accent-hover); }
 
@@ -53,4 +62,3 @@ body.dark .dark-mode-toggle-btn:hover {
         bottom: 12px;
     }
 }
-
