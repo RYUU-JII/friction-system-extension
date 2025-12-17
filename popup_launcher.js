@@ -24,6 +24,7 @@ function sendMessage(message) {
 }
 
 function setMsg(el, text, tone = "muted") {
+  if (!el) return;
   el.textContent = text || "";
   el.classList.remove("is-success", "is-error");
   if (tone === "success") el.classList.add("is-success");
@@ -31,12 +32,14 @@ function setMsg(el, text, tone = "muted") {
 }
 
 function setBlockedButtonState(button, blocked) {
+  if (!button) return;
   button.classList.toggle("is-blocked", blocked);
   button.disabled = blocked;
   button.textContent = blocked ? "차단 중" : "현재 사이트 차단";
 }
 
 function setStatusPill(el, blocked, hostname) {
+  if (!el) return;
   el.classList.remove("is-ok", "is-blocked");
   if (!hostname) {
     el.textContent = "차단 불가";
@@ -53,12 +56,16 @@ function setStatusPill(el, blocked, hostname) {
 
 async function init() {
   const openDashboardBtn = document.getElementById("openDashboard");
-  const quickBlockBtn = document.getElementById("quickBlock");
+  const quickBlockBtn = document.getElementById("quickBlockBtn");
   const msgEl = document.getElementById("msg");
   const siteDomainEl = document.getElementById("siteDomain");
   const siteHintEl = document.getElementById("siteHint");
   const siteStatusEl = document.getElementById("siteStatus");
   const siteFaviconEl = document.getElementById("siteFavicon");
+
+  if (!openDashboardBtn || !quickBlockBtn || !msgEl || !siteDomainEl || !siteHintEl || !siteStatusEl) {
+    return;
+  }
 
   openDashboardBtn.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
@@ -120,4 +127,8 @@ async function init() {
   });
 }
 
-init();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
