@@ -174,14 +174,35 @@ async function loadStatsCache() {
 function ensureHourlyArrays(domainData) {
     if (!domainData || typeof domainData !== 'object') return;
 
+    const normalize24 = (val) => {
+        const arr = Array(24).fill(0);
+        if (!val) return arr;
+
+        // Array (may be shorter/longer).
+        if (Array.isArray(val)) {
+            for (let i = 0; i < 24; i++) arr[i] = ensureNumber(val[i]);
+            return arr;
+        }
+
+        // Legacy object shape: { "0": ms, ... } or { 0: ms, ... }.
+        if (typeof val === 'object') {
+            for (let i = 0; i < 24; i++) {
+                arr[i] = ensureNumber(val[i] ?? val[String(i)]);
+            }
+            return arr;
+        }
+
+        return arr;
+    };
+
     if (!Array.isArray(domainData.hourly) || domainData.hourly.length !== 24) {
-        domainData.hourly = Array(24).fill(0);
+        domainData.hourly = normalize24(domainData.hourly);
     }
     if (!Array.isArray(domainData.hourlyActive) || domainData.hourlyActive.length !== 24) {
-        domainData.hourlyActive = Array(24).fill(0);
+        domainData.hourlyActive = normalize24(domainData.hourlyActive);
     }
     if (!Array.isArray(domainData.hourlyBackground) || domainData.hourlyBackground.length !== 24) {
-        domainData.hourlyBackground = Array(24).fill(0);
+        domainData.hourlyBackground = normalize24(domainData.hourlyBackground);
     }
 }
 
@@ -225,7 +246,7 @@ function migrateLegacyHourlyData() {
 
             const hasHourlyActive = Array.isArray(domainData.hourlyActive) && domainData.hourlyActive.length === 24;
             const hasHourlyBackground = Array.isArray(domainData.hourlyBackground) && domainData.hourlyBackground.length === 24;
-            const hasLegacyHourly = Array.isArray(domainData.hourly) && domainData.hourly.length === 24;
+            const hasLegacyHourly = domainData.hourly && (Array.isArray(domainData.hourly) || typeof domainData.hourly === 'object');
 
             if (hasHourlyActive && hasHourlyBackground) continue;
 
@@ -436,7 +457,8 @@ async function trackAllTabsBatch() {
         const hostname = getHostname(tab.url);
         if (!hostname || tab.url.startsWith('chrome://') || hostname === chrome.runtime.id) continue;
 
-        const isForegroundActive = focusedWindowId !== null && tab.active && tab.windowId === focusedWindowId;
+        const isForegroundActive =
+            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : !!tab.active;
         const prev = hostStates.get(hostname) || { isActive: false };
         if (isForegroundActive) prev.isActive = true;
         hostStates.set(hostname, prev);
@@ -595,7 +617,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // 탭 업데이트 (✨ async로 변경)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (tab.url && changeInfo.status === 'complete') {
-        const isForegroundActive = focusedWindowId !== null && tab.active && tab.windowId === focusedWindowId;
+        const isForegroundActive =
+            focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : !!tab.active;
         await sendFrictionMessage(tabId, tab.url);
         await settleTabTime(tab.url, isForegroundActive, true);
         if (isForegroundActive) {
@@ -606,7 +629,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 // 탭 활성화 (✨ 이전 탭 정산 추가)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-    if (focusedWindowId === null || activeInfo.windowId !== focusedWindowId) return;
+    if (focusedWindowId !== null && activeInfo.windowId !== focusedWindowId) return;
     if (activeInfo.tabId === lastActiveTabId) return;
     const now = Date.now();
     // 1. 이전 활성 탭의 시간을 먼저 정산
