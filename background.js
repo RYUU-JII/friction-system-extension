@@ -4,29 +4,17 @@ import { isFrictionTime, getLocalDateStr, ensureNumber, getHostname } from './ut
 const DEFAULT_FILTER_SETTINGS = CONFIG_DEFAULT_FILTER_SETTINGS;
 
 const DEFAULT_NUDGE_CONFIG = {
-    // 자동 개입(게임) 트리거: 기본은 OFF (대시보드에서 켤 때만 동작)
-    enabled: false,
-
-    // 하루 누적(active) 기준
+    enabled: true,
     thresholdMs: 30 * 60 * 1000,
-    oncePerHostPerDay: true,
-
-    // 표시/난이도 파라미터
     spriteSizePx: 96,
     baseSpeedPxPerSec: 140,
     spawnIntervalMs: 4000,
     maxSprites: 6,
     speedRamp: 1.15,
-
     asset: {
         gifPath: 'samples/images/nudge-object.gif',
         audioPath: 'samples/sounds/nudge-music.mp3',
-        label: 'nudge-object',
-    },
-
-    message: {
-        title: '잠깐!',
-        body: '지금 차단 사이트에 머무는 시간이 길어졌어요. 대시보드로 이동해서 오늘 리캡을 확인해볼까요?',
+        label: 'rat-dance',
     },
 };
 
@@ -56,6 +44,7 @@ let statsCache = { dates: {} };
 let cacheLoaded = false;
 let saveTimer = null;
 let lastActiveTabId = null;
+let focusedWindowId = null;
 
 const CACHE_SAVE_INTERVAL_MS = 300000;
 
@@ -71,10 +60,6 @@ function mergeNudgeConfig(partial) {
         asset: {
             ...DEFAULT_NUDGE_CONFIG.asset,
             ...(src.asset && typeof src.asset === 'object' ? src.asset : {}),
-        },
-        message: {
-            ...DEFAULT_NUDGE_CONFIG.message,
-            ...(src.message && typeof src.message === 'object' ? src.message : {}),
         },
     };
 }
@@ -94,6 +79,14 @@ async function markNudgeShown(key) {
     if (nudgeShown[key]) return;
     nudgeShown[key] = Date.now();
     await chrome.storage.session.set({ nudgeShown });
+}
+
+async function markNudgeAck(key) {
+    const session = await chrome.storage.session.get({ nudgeAck: {} });
+    const nudgeAck = session.nudgeAck || {};
+    if (nudgeAck[key]) return;
+    nudgeAck[key] = Date.now();
+    await chrome.storage.session.set({ nudgeAck });
 }
 
 async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
@@ -119,11 +112,8 @@ async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
     const config = mergeNudgeConfig(items.nudgeConfig);
     if (!config.enabled && !force) return;
 
-    if (!force && config.oncePerHostPerDay !== false) {
-        if (await isNudgeShown(key)) return;
-    }
-
     if (!force) {
+        if (await isNudgeShown(key)) return;
         const domainData = statsCache?.dates?.[dateStr]?.domains?.[hostname];
         const activeMs = domainData ? ensureNumber(domainData.active) : 0;
         if (activeMs < ensureNumber(config.thresholdMs)) return;
@@ -139,7 +129,7 @@ async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
                 reason: force ? 'debug' : 'threshold',
             },
         });
-        if (!force && config.oncePerHostPerDay !== false) await markNudgeShown(key);
+        await markNudgeShown(key);
     } catch (e) {
         // content script not ready / tab unavailable
     }
@@ -171,12 +161,110 @@ async function loadStatsCache() {
         }
         
         pruneOldData();
+        const migrated = migrateLegacyHourlyData();
+        if (migrated) saveStatsDebounced();
         cacheLoaded = true;
     } catch (e) {
         console.error("Failed to load stats cache:", e);
         statsCache = { dates: {} };
         cacheLoaded = true;
     }
+}
+
+function ensureHourlyArrays(domainData) {
+    if (!domainData || typeof domainData !== 'object') return;
+
+    if (!Array.isArray(domainData.hourly) || domainData.hourly.length !== 24) {
+        domainData.hourly = Array(24).fill(0);
+    }
+    if (!Array.isArray(domainData.hourlyActive) || domainData.hourlyActive.length !== 24) {
+        domainData.hourlyActive = Array(24).fill(0);
+    }
+    if (!Array.isArray(domainData.hourlyBackground) || domainData.hourlyBackground.length !== 24) {
+        domainData.hourlyBackground = Array(24).fill(0);
+    }
+}
+
+function addElapsedToHourly(domainData, startTs, endTs, isActive) {
+    if (!domainData || typeof domainData !== 'object') return;
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || endTs <= startTs) return;
+
+    ensureHourlyArrays(domainData);
+
+    let cursor = startTs;
+    while (cursor < endTs) {
+        const cursorDate = new Date(cursor);
+        const hourIdx = cursorDate.getHours();
+
+        const nextHour = new Date(cursorDate);
+        nextHour.setMinutes(60, 0, 0);
+        const sliceEnd = Math.min(endTs, nextHour.getTime());
+        const sliceMs = sliceEnd - cursor;
+
+        if (sliceMs > 0) {
+            domainData.hourly[hourIdx] += sliceMs;
+            if (isActive) domainData.hourlyActive[hourIdx] += sliceMs;
+            else domainData.hourlyBackground[hourIdx] += sliceMs;
+        }
+
+        cursor = sliceEnd;
+    }
+}
+
+function migrateLegacyHourlyData() {
+    if (!statsCache?.dates || typeof statsCache.dates !== 'object') return false;
+
+    let changed = false;
+
+    for (const dateData of Object.values(statsCache.dates)) {
+        const domains = dateData?.domains;
+        if (!domains || typeof domains !== 'object') continue;
+
+        for (const domainData of Object.values(domains)) {
+            if (!domainData || typeof domainData !== 'object') continue;
+
+            const hasHourlyActive = Array.isArray(domainData.hourlyActive) && domainData.hourlyActive.length === 24;
+            const hasHourlyBackground = Array.isArray(domainData.hourlyBackground) && domainData.hourlyBackground.length === 24;
+            const hasLegacyHourly = Array.isArray(domainData.hourly) && domainData.hourly.length === 24;
+
+            if (hasHourlyActive && hasHourlyBackground) continue;
+
+            ensureHourlyArrays(domainData);
+            changed = true;
+
+            if (!hasLegacyHourly) continue;
+
+            const active = ensureNumber(domainData.active);
+            const background = ensureNumber(domainData.background);
+            const sum = active + background;
+            const ratio = sum > 0 ? (active / sum) : 0;
+
+            for (let h = 0; h < 24; h++) {
+                const raw = ensureNumber(domainData.hourly[h]);
+                const estActive = Math.max(0, Math.round(raw * ratio));
+                domainData.hourlyActive[h] = estActive;
+                domainData.hourlyBackground[h] = Math.max(0, raw - estActive);
+            }
+        }
+
+        // Legacy data can create impossible "active" totals per hour. Clamp to <= 1h/hour.
+        for (let h = 0; h < 24; h++) {
+            let totalActiveThisHour = 0;
+            for (const domainData of Object.values(domains)) {
+                totalActiveThisHour += ensureNumber(domainData?.hourlyActive?.[h]);
+            }
+            if (totalActiveThisHour <= 3600000) continue;
+
+            const scale = 3600000 / totalActiveThisHour;
+            for (const domainData of Object.values(domains)) {
+                if (!Array.isArray(domainData?.hourlyActive) || domainData.hourlyActive.length !== 24) continue;
+                domainData.hourlyActive[h] = Math.floor(ensureNumber(domainData.hourlyActive[h]) * scale);
+            }
+            changed = true;
+        }
+    }
+
+    return changed;
 }
 
 async function saveStatsCache() {
@@ -225,9 +313,8 @@ function pruneOldData() {
 // 3. 핵심 로직: 시간 계산
 // ===========================================================
 
-async function calculateTabTime(hostname, now, isActive) {
-    const dateStr = getLocalDateStr();
-    const hour = new Date(now).getHours();
+async function calculateTabTime(hostname, now, isActive, blockedUrlsOverride = null) {
+    const dateStr = getLocalDateStr(now);
     
     if (!statsCache.dates[dateStr]) {
         statsCache.dates[dateStr] = { 
@@ -247,7 +334,7 @@ async function calculateTabTime(hostname, now, isActive) {
             active: 0, 
             background: 0, 
             visits: 0, 
-            hourly: Array(24).fill(0), 
+            hourly: Array(24).fill(0),
             hourlyActive: Array(24).fill(0),
             hourlyBackground: Array(24).fill(0),
             lastTrackedTime: now 
@@ -256,20 +343,7 @@ async function calculateTabTime(hostname, now, isActive) {
     }
 
     const domainData = dateData.domains[hostname];
-
-    // Backward compatible: 기존 저장 데이터(hourly에 bg 포함)를 유지하면서, 포그라운드/백그라운드 시간대 분리를 추가합니다.
-    if (!Array.isArray(domainData.hourly) || domainData.hourly.length !== 24) {
-        domainData.hourly = Array(24).fill(0);
-    }
-    if (!Array.isArray(domainData.hourlyActive) || domainData.hourlyActive.length !== 24 || !Array.isArray(domainData.hourlyBackground) || domainData.hourlyBackground.length !== 24) {
-        const hourlyTotal = Array.isArray(domainData.hourly) && domainData.hourly.length === 24 ? domainData.hourly.slice() : Array(24).fill(0);
-        const activeTotal = ensureNumber(domainData.active);
-        const backgroundTotal = ensureNumber(domainData.background);
-        const sum = activeTotal + backgroundTotal;
-        const ratio = sum > 0 ? (activeTotal / sum) : 0;
-        domainData.hourlyActive = hourlyTotal.map((v) => Math.round(ensureNumber(v) * ratio));
-        domainData.hourlyBackground = hourlyTotal.map((v, i) => Math.max(0, ensureNumber(v) - domainData.hourlyActive[i]));
-    }
+    ensureHourlyArrays(domainData);
     const lastTime = ensureNumber(domainData.lastTrackedTime);
     
     if (lastTime === 0) {
@@ -287,17 +361,16 @@ async function calculateTabTime(hostname, now, isActive) {
 
     const timeType = isActive ? 'active' : 'background';
     domainData[timeType] += elapsed;
-    domainData.hourly[hour] += elapsed;
-    if (isActive) domainData.hourlyActive[hour] += elapsed;
-    else domainData.hourlyBackground[hour] += elapsed;
+    addElapsedToHourly(domainData, lastTime, now, isActive);
     domainData.lastTrackedTime = now;
 
     // Update totals
     dateData.totals[`total${timeType.charAt(0).toUpperCase() + timeType.slice(1)}`] += elapsed;
 
     // Blocked check
-    const items = await chrome.storage.local.get('blockedUrls');
-    const blockedUrls = items.blockedUrls || [];
+    const blockedUrls = Array.isArray(blockedUrlsOverride)
+        ? blockedUrlsOverride
+        : ((await chrome.storage.local.get('blockedUrls')).blockedUrls || []);
     if (blockedUrls.includes(hostname)) {
         dateData.totals[`blocked${timeType.charAt(0).toUpperCase() + timeType.slice(1)}`] += elapsed;
     }
@@ -305,13 +378,13 @@ async function calculateTabTime(hostname, now, isActive) {
     return true;
 }
 
-async function settleTabTime(url, isActive, isNewVisit = false) {
+async function settleTabTime(url, isActive, isNewVisit = false, nowOverride = null) {
     await loadStatsCache();
     const hostname = getHostname(url);
 
     if (!hostname || url.startsWith('chrome://') || hostname === chrome.runtime.id) return;
     
-    const now = Date.now();
+    const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
     let isChanged = await calculateTabTime(hostname, now, isActive);
     
     if (isNewVisit) {
@@ -334,13 +407,13 @@ async function settleTabTime(url, isActive, isNewVisit = false) {
 }
 
 // ✨ 수정: 이전 탭 시간을 정산하는 함수 추가
-async function settlePreviousTab() {
+async function settlePreviousTab(nowOverride = null) {
     if (lastActiveTabId === null) return;
     
     try {
         const tab = await chrome.tabs.get(lastActiveTabId);
         if (tab && tab.url) {
-            await settleTabTime(tab.url, false, false);
+            await settleTabTime(tab.url, true, false, nowOverride);
         }
     } catch (e) {
         // 탭이 닫혔을 수 있음
@@ -354,10 +427,23 @@ async function trackAllTabsBatch() {
     const now = Date.now();
     let isChanged = false;
     
+    const items = await chrome.storage.local.get('blockedUrls');
+    const blockedUrls = Array.isArray(items.blockedUrls) ? items.blockedUrls : [];
+
+    // Track per hostname once per tick (avoids order-dependent active/background assignment).
+    const hostStates = new Map(); // hostname -> { isActive: boolean }
     for (const tab of tabs) {
         const hostname = getHostname(tab.url);
         if (!hostname || tab.url.startsWith('chrome://') || hostname === chrome.runtime.id) continue;
-        if (await calculateTabTime(hostname, now, tab.active)) isChanged = true;
+
+        const isForegroundActive = focusedWindowId !== null && tab.active && tab.windowId === focusedWindowId;
+        const prev = hostStates.get(hostname) || { isActive: false };
+        if (isForegroundActive) prev.isActive = true;
+        hostStates.set(hostname, prev);
+    }
+
+    for (const [hostname, state] of hostStates.entries()) {
+        if (await calculateTabTime(hostname, now, !!state.isActive, blockedUrls)) isChanged = true;
     }
     
     if (isChanged) scheduleCacheSave();
@@ -391,6 +477,9 @@ async function sendFrictionMessage(tabId, url) {
         // 탭이 아직 로드되지 않았거나 닫힌 경우 무시
     }
 
+    if (shouldApplyFilter) {
+        maybeTriggerNudge(tabId, url).catch(() => {});
+    }
 }
 
 async function broadcastSettingsUpdate() {
@@ -443,25 +532,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const knownActions = new Set([
         "SETTINGS_UPDATED",
         "SCHEDULE_UPDATED",
-        "NUDGE_CONFIG_UPDATED",
         "DEBUG_GET_CACHE",
         "DEBUG_FORCE_SAVE",
         "DEBUG_TRACK_NOW",
+        "NUDGE_ACK",
     ]);
     if (!knownActions.has(request.action)) return false;
-    if (request.action === "SETTINGS_UPDATED" || request.action === "SCHEDULE_UPDATED" || request.action === "NUDGE_CONFIG_UPDATED") {
+    if (request.action === "SETTINGS_UPDATED" || request.action === "SCHEDULE_UPDATED") {
         // async 함수를 즉시 실행
         (async () => {
             await broadcastSettingsUpdate();
             await checkScheduleStatus();
-            if (lastActiveTabId !== null) {
-                try {
-                    const tab = await chrome.tabs.get(lastActiveTabId);
-                    if (tab?.url) await maybeTriggerNudge(lastActiveTabId, tab.url);
-                } catch (e) {
-                    // ignore
-                }
-            }
         })().catch((e) => console.error("Error handling settings/schedule update:", e));
         sendResponse({ success: true });
         return false;
@@ -477,6 +558,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return false;
     }
 
+    if (request.action === "NUDGE_ACK") {
+        const hostname = typeof request.hostname === 'string' ? request.hostname : '';
+        const dateStr = typeof request.dateStr === 'string' ? request.dateStr : getLocalDateStr();
+        if (hostname) {
+            const key = getNudgeDayKey(dateStr, hostname);
+            markNudgeAck(key).catch(() => {});
+        }
+        sendResponse({ success: true });
+        return false;
+    }
+    
     if (request.action === "DEBUG_FORCE_SAVE") {
         saveStatsCache().then(() => {
             sendResponse({ success: true, message: "저장 완료" });
@@ -503,9 +595,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // 탭 업데이트 (✨ async로 변경)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (tab.url && changeInfo.status === 'complete') {
+        const isForegroundActive = focusedWindowId !== null && tab.active && tab.windowId === focusedWindowId;
         await sendFrictionMessage(tabId, tab.url);
-        await settleTabTime(tab.url, tab.active, true);
-        if (tab.active) {
+        await settleTabTime(tab.url, isForegroundActive, true);
+        if (isForegroundActive) {
             await maybeTriggerNudge(tabId, tab.url);
         }
     }
@@ -513,15 +606,18 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 // 탭 활성화 (✨ 이전 탭 정산 추가)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    if (focusedWindowId === null || activeInfo.windowId !== focusedWindowId) return;
+    if (activeInfo.tabId === lastActiveTabId) return;
+    const now = Date.now();
     // 1. 이전 활성 탭의 시간을 먼저 정산
-    await settlePreviousTab();
+    await settlePreviousTab(now);
     
     // 2. 새로운 활성 탭 처리
     try {
         const tab = await chrome.tabs.get(activeInfo.tabId);
         if (tab && tab.url) {
             await sendFrictionMessage(tab.id, tab.url);
-            await settleTabTime(tab.url, true, false);
+            await settleTabTime(tab.url, false, false, now);
             lastActiveTabId = activeInfo.tabId;
             await maybeTriggerNudge(tab.id, tab.url);
         }
@@ -533,12 +629,15 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // 브라우저 포커스 변경 (✨ async로 변경)
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
     if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+        const now = Date.now();
+        await settlePreviousTab(now);
+        focusedWindowId = windowId;
         try {
             const window = await chrome.windows.get(windowId, { populate: true });
             const activeTab = window.tabs.find(t => t.active);
             if (activeTab && activeTab.url) {
                 await sendFrictionMessage(activeTab.id, activeTab.url);
-                await settleTabTime(activeTab.url, true, false);
+                await settleTabTime(activeTab.url, false, false, now);
                 lastActiveTabId = activeTab.id;
                 await maybeTriggerNudge(activeTab.id, activeTab.url);
             }
@@ -547,6 +646,10 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
         }
     } else {
         // 포커스 상실 시
+        const now = Date.now();
+        await settlePreviousTab(now);
+        focusedWindowId = null;
+        lastActiveTabId = null;
         await trackAllTabsBatch();
         await saveStatsCache();
     }
@@ -565,9 +668,11 @@ chrome.runtime.onSuspend.addListener(async () => {
     
     // 현재 활성 탭 추적 시작
     try {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab) {
-            lastActiveTabId = activeTab.id;
+        const win = await chrome.windows.getLastFocused({ populate: true });
+        if (win && win.id !== chrome.windows.WINDOW_ID_NONE) {
+            focusedWindowId = win.id;
+            const activeTab = win.tabs && Array.isArray(win.tabs) ? win.tabs.find(t => t.active) : null;
+            if (activeTab) lastActiveTabId = activeTab.id;
         }
     } catch (e) {
         console.error("Error initializing active tab:", e);
