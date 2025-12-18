@@ -949,16 +949,23 @@ const InputDelayManager = {
                 margin: 0;
                 box-sizing: border-box;
             }
-            .friction-input-overlay__inner {
-                box-sizing: border-box;
-                width: 100%;
-                height: 100%;
-                white-space: pre;
-                overflow-wrap: break-word;
-                word-break: break-word;
-                transform: translate3d(0, 0, 0);
-            }
-        `;
+             .friction-input-overlay__inner {
+                 box-sizing: border-box;
+                 width: 100%;
+                 height: 100%;
+                 display: flex;
+                 align-items: flex-start;
+                 justify-content: flex-start;
+             }
+             .friction-input-overlay__content {
+                 box-sizing: border-box;
+                 min-width: 100%;
+                 overflow-wrap: break-word;
+                 word-break: break-word;
+                 transform: translate3d(0, 0, 0);
+                 will-change: transform;
+             }
+         `;
 
         setRootAttribute(STYLES.INPUT_DELAY.ATTR, 'active');
     },
@@ -991,12 +998,15 @@ const InputDelayManager = {
         const existing = this.stateByEl.get(el);
         if (existing) return existing;
 
-        const overlay = document.createElement('div');
-        overlay.className = 'friction-input-overlay';
-        const inner = document.createElement('div');
-        inner.className = 'friction-input-overlay__inner';
-        overlay.appendChild(inner);
-        (document.body || document.documentElement).appendChild(overlay);
+         const overlay = document.createElement('div');
+         overlay.className = 'friction-input-overlay';
+         const inner = document.createElement('div');
+         inner.className = 'friction-input-overlay__inner';
+         const content = document.createElement('div');
+         content.className = 'friction-input-overlay__content';
+         inner.appendChild(content);
+         overlay.appendChild(inner);
+         (document.documentElement || document.body).appendChild(overlay);
 
         let caret = '';
         let placeholderColor = '';
@@ -1007,6 +1017,13 @@ const InputDelayManager = {
             textAlign: '',
             lineHeight: '',
             color: '',
+            textIndent: '',
+            direction: '',
+            borderTopWidth: '',
+            borderRightWidth: '',
+            borderBottomWidth: '',
+            borderLeftWidth: '',
+            borderRadius: '',
         };
         try {
             const cs = getComputedStyle(el);
@@ -1017,6 +1034,13 @@ const InputDelayManager = {
             snapshot.textAlign = cs.textAlign;
             snapshot.lineHeight = cs.lineHeight;
             snapshot.color = cs.color;
+            snapshot.textIndent = cs.textIndent;
+            snapshot.direction = cs.direction;
+            snapshot.borderTopWidth = cs.borderTopWidth;
+            snapshot.borderRightWidth = cs.borderRightWidth;
+            snapshot.borderBottomWidth = cs.borderBottomWidth;
+            snapshot.borderLeftWidth = cs.borderLeftWidth;
+            snapshot.borderRadius = cs.borderRadius;
             placeholderColor = getComputedStyle(el, '::placeholder')?.color || '';
         } catch (_) {}
 
@@ -1024,22 +1048,23 @@ const InputDelayManager = {
         if (placeholderColor) el.style.setProperty('--friction-placeholder-color', placeholderColor);
         el.setAttribute('data-friction-input-delay', '1');
 
-        const state = {
-            el,
-            overlay,
-            inner,
-            displayedValue: typeof el.value === 'string' ? el.value : '',
-            snapshot,
-            queue: [],
-            running: false,
-        };
-
-        inner.textContent = state.displayedValue;
-        this.stateByEl.set(el, state);
-        this.tracked.add(el);
-        this.updateOverlay(state);
-        return state;
-    },
+         const state = {
+             el,
+             overlay,
+             inner,
+             content,
+             displayedValue: typeof el.value === 'string' ? el.value : '',
+             snapshot,
+             queue: [],
+             running: false,
+         };
+ 
+         content.textContent = state.displayedValue;
+         this.stateByEl.set(el, state);
+         this.tracked.add(el);
+         this.updateOverlay(state);
+         return state;
+     },
 
     cleanupElement(el) {
         const st = this.stateByEl.get(el);
@@ -1060,10 +1085,11 @@ const InputDelayManager = {
     },
 
     updateOverlay(state) {
-        const el = state?.el;
-        const overlay = state?.overlay;
-        const inner = state?.inner;
-        if (!el || !overlay || !inner) return;
+         const el = state?.el;
+         const overlay = state?.overlay;
+         const inner = state?.inner;
+         const content = state?.content;
+         if (!el || !overlay || !inner || !content) return;
         if (!el.isConnected) {
             this.cleanupElement(el);
             return;
@@ -1080,23 +1106,42 @@ const InputDelayManager = {
         overlay.style.left = `${rect.left}px`;
         overlay.style.top = `${rect.top}px`;
         overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
+         overlay.style.height = `${rect.height}px`;
+ 
+         const snap = state.snapshot || {};
+         if (snap.padding) inner.style.padding = snap.padding;
+         if (snap.font) content.style.font = snap.font;
+         if (snap.letterSpacing) content.style.letterSpacing = snap.letterSpacing;
+         if (snap.textAlign) content.style.textAlign = snap.textAlign;
+         if (snap.lineHeight) content.style.lineHeight = snap.lineHeight;
+         if (snap.color) content.style.color = snap.color;
+         if (snap.textIndent) content.style.textIndent = snap.textIndent;
+         if (snap.direction) content.style.direction = snap.direction;
 
-        const snap = state.snapshot || {};
-        if (snap.padding) inner.style.padding = snap.padding;
-        if (snap.font) inner.style.font = snap.font;
-        if (snap.letterSpacing) inner.style.letterSpacing = snap.letterSpacing;
-        if (snap.textAlign) inner.style.textAlign = snap.textAlign;
-        if (snap.lineHeight) inner.style.lineHeight = snap.lineHeight;
-        if (snap.color) inner.style.color = snap.color;
-
-        const isTextarea = el instanceof HTMLTextAreaElement;
-        inner.style.whiteSpace = isTextarea ? 'pre-wrap' : 'pre';
-
-        const scrollLeft = el.scrollLeft || 0;
-        const scrollTop = el.scrollTop || 0;
-        inner.style.transform = `translate3d(${-scrollLeft}px, ${-scrollTop}px, 0)`;
-    },
+        // Some UAs center/offset input text relative to the outer border box (especially for search fields).
+        // Replicating border box metrics prevents subtle vertical "one notch" drift between the real input and the overlay text.
+        if (snap.borderTopWidth || snap.borderRightWidth || snap.borderBottomWidth || snap.borderLeftWidth) {
+            overlay.style.borderStyle = 'solid';
+            overlay.style.borderColor = 'transparent';
+            if (snap.borderTopWidth) overlay.style.borderTopWidth = snap.borderTopWidth;
+            if (snap.borderRightWidth) overlay.style.borderRightWidth = snap.borderRightWidth;
+            if (snap.borderBottomWidth) overlay.style.borderBottomWidth = snap.borderBottomWidth;
+            if (snap.borderLeftWidth) overlay.style.borderLeftWidth = snap.borderLeftWidth;
+        } else {
+            overlay.style.borderWidth = '0';
+            overlay.style.borderStyle = 'solid';
+            overlay.style.borderColor = 'transparent';
+        }
+         if (snap.borderRadius) overlay.style.borderRadius = snap.borderRadius;
+ 
+         const isTextarea = el instanceof HTMLTextAreaElement;
+         inner.style.alignItems = isTextarea ? 'flex-start' : 'center';
+         content.style.whiteSpace = isTextarea ? 'pre-wrap' : 'pre';
+ 
+         const scrollLeft = el.scrollLeft || 0;
+         const scrollTop = el.scrollTop || 0;
+         content.style.transform = `translate3d(${-scrollLeft}px, ${-scrollTop}px, 0)`;
+     },
 
     scheduleAllOverlaysUpdate() {
         if (this.rafPending) return;
@@ -1114,12 +1159,12 @@ const InputDelayManager = {
         const v = typeof value === 'string' ? value : String(value ?? '');
         const delayMs = this.pickDelayMs();
 
-        if (delayMs <= 0) {
-            state.queue.length = 0;
-            state.displayedValue = v;
-            state.inner.textContent = v;
-            return;
-        }
+         if (delayMs <= 0) {
+             state.queue.length = 0;
+             state.displayedValue = v;
+             state.content.textContent = v;
+             return;
+         }
 
         state.queue.push({ value: v, delayMs });
         if (state.queue.length > 12) {
@@ -1136,13 +1181,13 @@ const InputDelayManager = {
 
         state.running = true;
         setTimeout(() => {
-            state.running = false;
-            state.displayedValue = item.value;
-            if (state.inner) state.inner.textContent = item.value;
-            this.updateOverlay(state);
-            this.runQueue(state);
-        }, item.delayMs);
-    },
+             state.running = false;
+             state.displayedValue = item.value;
+             if (state.content) state.content.textContent = item.value;
+             this.updateOverlay(state);
+             this.runQueue(state);
+         }, item.delayMs);
+     },
 
     handleFocusIn(e) {
         if (!this.active || this.maxDelayMs <= 0) return;
