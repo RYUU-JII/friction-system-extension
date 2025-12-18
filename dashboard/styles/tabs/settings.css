@@ -118,7 +118,6 @@
 .settings-preview.is-hover-reveal-enabled #previewAfter .preview-media:hover,
 .settings-preview.is-hover-reveal-enabled #previewAfter .preview-text:hover {
     filter: none !important;
-    opacity: 1 !important;
     text-shadow: none !important;
 }
 body.dark .preview-text {
