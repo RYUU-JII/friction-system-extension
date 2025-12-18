@@ -20,7 +20,8 @@ const STYLES = {
     VISUAL: { ID: 'friction-visual-style', ATTR: 'data-visual-applied' },
     DELAY: { ID: 'friction-delay-style', ATTR: 'data-delay-applied' },
     SPACING: { ID: 'friction-spacing-style', ATTR: 'data-spacing-applied' },
-    TEXT_SHUFFLE: { ID: 'friction-text-shuffle-style', ATTR: 'data-text-shuffle-pending' }
+    TEXT_SHUFFLE: { ID: 'friction-text-shuffle-style', ATTR: 'data-text-shuffle-pending' },
+    INPUT_DELAY: { ID: 'friction-input-delay-style', ATTR: 'data-input-delay-applied' },
 };
 
 const ATTRS = {
@@ -842,54 +843,71 @@ const TextShuffleManager = {
 
 const InputDelayManager = {
     active: false,
-    delayMs: 0,
-    composing: false,
-    boundBeforeInput: null,
-    boundPaste: null,
-    boundCompositionStart: null,
-    boundCompositionEnd: null,
+    maxDelayMs: 0,
+    boundInput: null,
+    boundFocusIn: null,
+    boundFocusOut: null,
+    boundScroll: null,
+    boundResize: null,
+    rafPending: false,
+    tracked: new Set(),
+    stateByEl: new WeakMap(),
 
     apply(value) {
-        const delayMs = Number(value) || 0;
-        if (delayMs <= 0) {
+        const maxDelayMs = Number(value) || 0;
+        if (maxDelayMs <= 0) {
             this.remove();
             return;
         }
 
-        this.delayMs = delayMs;
+        this.maxDelayMs = maxDelayMs;
         if (this.active) return;
 
-        this.boundBeforeInput = this.handleBeforeInput.bind(this);
-        this.boundPaste = this.handlePaste.bind(this);
-        this.boundCompositionStart = () => { this.composing = true; };
-        this.boundCompositionEnd = () => { this.composing = false; };
+        this.installStyle();
 
-        document.addEventListener('compositionstart', this.boundCompositionStart, true);
-        document.addEventListener('compositionend', this.boundCompositionEnd, true);
-        document.addEventListener('beforeinput', this.boundBeforeInput, true);
-        document.addEventListener('paste', this.boundPaste, true);
+        this.boundInput = this.handleInput.bind(this);
+        this.boundFocusIn = this.handleFocusIn.bind(this);
+        this.boundFocusOut = this.handleFocusOut.bind(this);
+        this.boundScroll = this.handleAnyScroll.bind(this);
+        this.boundResize = this.scheduleAllOverlaysUpdate.bind(this);
+
+        document.addEventListener('focusin', this.boundFocusIn, true);
+        document.addEventListener('focusout', this.boundFocusOut, true);
+        document.addEventListener('input', this.boundInput, true);
+        document.addEventListener('scroll', this.boundScroll, true);
+        window.addEventListener('resize', this.boundResize, true);
         this.active = true;
     },
 
     remove() {
         if (!this.active) {
-            this.delayMs = 0;
-            this.composing = false;
+            this.maxDelayMs = 0;
             return;
         }
 
-        document.removeEventListener('compositionstart', this.boundCompositionStart, true);
-        document.removeEventListener('compositionend', this.boundCompositionEnd, true);
-        document.removeEventListener('beforeinput', this.boundBeforeInput, true);
-        document.removeEventListener('paste', this.boundPaste, true);
+        document.removeEventListener('focusin', this.boundFocusIn, true);
+        document.removeEventListener('focusout', this.boundFocusOut, true);
+        document.removeEventListener('input', this.boundInput, true);
+        document.removeEventListener('scroll', this.boundScroll, true);
+        window.removeEventListener('resize', this.boundResize, true);
 
-        this.boundBeforeInput = null;
-        this.boundPaste = null;
-        this.boundCompositionStart = null;
-        this.boundCompositionEnd = null;
+        this.boundInput = null;
+        this.boundFocusIn = null;
+        this.boundFocusOut = null;
+        this.boundScroll = null;
+        this.boundResize = null;
 
-        this.delayMs = 0;
-        this.composing = false;
+        for (const el of Array.from(this.tracked)) {
+            this.cleanupElement(el);
+        }
+        this.tracked.clear();
+        this.stateByEl = new WeakMap();
+
+        const style = document.getElementById(STYLES.INPUT_DELAY.ID);
+        if (style) style.remove();
+        setRootAttribute(STYLES.INPUT_DELAY.ATTR, 'none');
+
+        this.maxDelayMs = 0;
         this.active = false;
     },
 
@@ -897,79 +915,276 @@ const InputDelayManager = {
         if (!el) return false;
         if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled;
         if (!(el instanceof HTMLInputElement)) return false;
-        const disallowedTypes = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'submit', 'button', 'image', 'reset', 'hidden']);
+        const disallowedTypes = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'submit', 'button', 'image', 'reset', 'hidden', 'password']);
         if (disallowedTypes.has(el.type)) return false;
         return !el.readOnly && !el.disabled;
     },
 
-    handleBeforeInput(e) {
-        if (!this.active || this.delayMs <= 0) return;
-        if (e.isComposing || this.composing) return;
+    installStyle() {
+        let style = document.getElementById(STYLES.INPUT_DELAY.ID);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = STYLES.INPUT_DELAY.ID;
+            const mount = document.head || document.documentElement;
+            if (mount) mount.appendChild(style);
+        }
 
-        const target = e.target;
-        if (!this.isTextInput(target)) return;
-        if (target instanceof HTMLElement && target.isContentEditable) return;
-
-        const inputType = e.inputType || '';
-        if (inputType.startsWith('insertFromPaste')) return;
-
-        const supported = new Set(['insertText', 'deleteContentBackward', 'deleteContentForward']);
-        if (!supported.has(inputType)) return;
-
-        e.preventDefault();
-        e.stopImmediatePropagation();
-
-        const data = e.data;
-        const action = () => {
-            try {
-                const start = target.selectionStart ?? 0;
-                const end = target.selectionEnd ?? start;
-
-                if (inputType === 'insertText') {
-                    const text = data ?? '';
-                    target.setRangeText(text, start, end, 'end');
-                } else if (inputType === 'deleteContentBackward') {
-                    if (start !== end) target.setRangeText('', start, end, 'end');
-                    else if (start > 0) target.setRangeText('', start - 1, start, 'end');
-                } else if (inputType === 'deleteContentForward') {
-                    if (start !== end) target.setRangeText('', start, end, 'end');
-                    else target.setRangeText('', start, Math.min((target.value || '').length, start + 1), 'end');
-                }
-
-                target.dispatchEvent(new Event('input', { bubbles: true }));
-            } catch (_) {
-                // no-op: fail safe to avoid breaking input
+        style.textContent = `
+            html:not([${STYLES.INPUT_DELAY.ATTR}="none"]) [data-friction-input-delay="1"] {
+                color: transparent !important;
+                -webkit-text-fill-color: transparent !important;
+                text-shadow: none !important;
+                caret-color: var(--friction-caret-color, auto) !important;
             }
-        };
+            html:not([${STYLES.INPUT_DELAY.ATTR}="none"]) [data-friction-input-delay="1"]::placeholder {
+                color: var(--friction-placeholder-color, rgba(0,0,0,0.45)) !important;
+                -webkit-text-fill-color: var(--friction-placeholder-color, rgba(0,0,0,0.45)) !important;
+            }
+            .friction-input-overlay {
+                position: fixed;
+                pointer-events: none;
+                z-index: 2147483647;
+                overflow: hidden;
+                background: transparent;
+                margin: 0;
+                box-sizing: border-box;
+            }
+            .friction-input-overlay__inner {
+                box-sizing: border-box;
+                width: 100%;
+                height: 100%;
+                white-space: pre;
+                overflow-wrap: break-word;
+                word-break: break-word;
+                transform: translate3d(0, 0, 0);
+            }
+        `;
 
-        setTimeout(action, this.delayMs);
+        setRootAttribute(STYLES.INPUT_DELAY.ATTR, 'active');
     },
 
-    handlePaste(e) {
-        if (!this.active || this.delayMs <= 0) return;
-        if (e.isComposing || this.composing) return;
+    pickDelayMs() {
+        const max = Math.max(0, this.maxDelayMs || 0);
+        if (max <= 0) return 0;
 
+        // Slider (0..500) acts as "annoyance strength": higher -> fewer no-delay keystrokes + occasional spikes.
+        const strength = Math.max(0, Math.min(1, max / 500));
+        const noDelayChance = 0.25 - strength * 0.18;
+        const spikeChance = 0.05 + strength * 0.15;
+
+        const r = Math.random();
+        if (r < noDelayChance) return 0;
+
+        const randInt = (a, b) => {
+            const lo = Math.min(a, b);
+            const hi = Math.max(a, b);
+            return lo + Math.floor(Math.random() * (hi - lo + 1));
+        };
+
+        if (r < noDelayChance + spikeChance) return randInt(max, Math.round(max * 3));
+
+        const min = Math.max(15, Math.round(max * 0.25));
+        return randInt(min, max);
+    },
+
+    ensureElementState(el) {
+        const existing = this.stateByEl.get(el);
+        if (existing) return existing;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'friction-input-overlay';
+        const inner = document.createElement('div');
+        inner.className = 'friction-input-overlay__inner';
+        overlay.appendChild(inner);
+        (document.body || document.documentElement).appendChild(overlay);
+
+        let caret = '';
+        let placeholderColor = '';
+        const snapshot = {
+            padding: '',
+            font: '',
+            letterSpacing: '',
+            textAlign: '',
+            lineHeight: '',
+            color: '',
+        };
+        try {
+            const cs = getComputedStyle(el);
+            caret = cs.caretColor && cs.caretColor !== 'auto' ? cs.caretColor : cs.color;
+            snapshot.padding = cs.padding;
+            snapshot.font = cs.font;
+            snapshot.letterSpacing = cs.letterSpacing;
+            snapshot.textAlign = cs.textAlign;
+            snapshot.lineHeight = cs.lineHeight;
+            snapshot.color = cs.color;
+            placeholderColor = getComputedStyle(el, '::placeholder')?.color || '';
+        } catch (_) {}
+
+        if (caret) el.style.setProperty('--friction-caret-color', caret);
+        if (placeholderColor) el.style.setProperty('--friction-placeholder-color', placeholderColor);
+        el.setAttribute('data-friction-input-delay', '1');
+
+        const state = {
+            el,
+            overlay,
+            inner,
+            displayedValue: typeof el.value === 'string' ? el.value : '',
+            snapshot,
+            queue: [],
+            running: false,
+        };
+
+        inner.textContent = state.displayedValue;
+        this.stateByEl.set(el, state);
+        this.tracked.add(el);
+        this.updateOverlay(state);
+        return state;
+    },
+
+    cleanupElement(el) {
+        const st = this.stateByEl.get(el);
+        if (!st) return;
+
+        try {
+            st.overlay.remove();
+        } catch (_) {}
+
+        try {
+            el.removeAttribute('data-friction-input-delay');
+            el.style.removeProperty('--friction-caret-color');
+            el.style.removeProperty('--friction-placeholder-color');
+        } catch (_) {}
+
+        this.stateByEl.delete(el);
+        this.tracked.delete(el);
+    },
+
+    updateOverlay(state) {
+        const el = state?.el;
+        const overlay = state?.overlay;
+        const inner = state?.inner;
+        if (!el || !overlay || !inner) return;
+        if (!el.isConnected) {
+            this.cleanupElement(el);
+            return;
+        }
+
+        let rect;
+        try {
+            rect = el.getBoundingClientRect();
+        } catch (_) {
+            return;
+        }
+        if (!rect) return;
+
+        overlay.style.left = `${rect.left}px`;
+        overlay.style.top = `${rect.top}px`;
+        overlay.style.width = `${rect.width}px`;
+        overlay.style.height = `${rect.height}px`;
+
+        const snap = state.snapshot || {};
+        if (snap.padding) inner.style.padding = snap.padding;
+        if (snap.font) inner.style.font = snap.font;
+        if (snap.letterSpacing) inner.style.letterSpacing = snap.letterSpacing;
+        if (snap.textAlign) inner.style.textAlign = snap.textAlign;
+        if (snap.lineHeight) inner.style.lineHeight = snap.lineHeight;
+        if (snap.color) inner.style.color = snap.color;
+
+        const isTextarea = el instanceof HTMLTextAreaElement;
+        inner.style.whiteSpace = isTextarea ? 'pre-wrap' : 'pre';
+
+        const scrollLeft = el.scrollLeft || 0;
+        const scrollTop = el.scrollTop || 0;
+        inner.style.transform = `translate3d(${-scrollLeft}px, ${-scrollTop}px, 0)`;
+    },
+
+    scheduleAllOverlaysUpdate() {
+        if (this.rafPending) return;
+        this.rafPending = true;
+        requestAnimationFrame(() => {
+            this.rafPending = false;
+            for (const el of Array.from(this.tracked)) {
+                const st = this.stateByEl.get(el);
+                if (st) this.updateOverlay(st);
+            }
+        });
+    },
+
+    enqueueValue(state, value) {
+        const v = typeof value === 'string' ? value : String(value ?? '');
+        const delayMs = this.pickDelayMs();
+
+        if (delayMs <= 0) {
+            state.queue.length = 0;
+            state.displayedValue = v;
+            state.inner.textContent = v;
+            return;
+        }
+
+        state.queue.push({ value: v, delayMs });
+        if (state.queue.length > 12) {
+            // Prevent unbounded growth on fast typing: keep the most recent tail.
+            state.queue.splice(0, state.queue.length - 12);
+        }
+        this.runQueue(state);
+    },
+
+    runQueue(state) {
+        if (state.running) return;
+        const item = state.queue.shift();
+        if (!item) return;
+
+        state.running = true;
+        setTimeout(() => {
+            state.running = false;
+            state.displayedValue = item.value;
+            if (state.inner) state.inner.textContent = item.value;
+            this.updateOverlay(state);
+            this.runQueue(state);
+        }, item.delayMs);
+    },
+
+    handleFocusIn(e) {
+        if (!this.active || this.maxDelayMs <= 0) return;
+        const target = e.target;
+        if (!this.isTextInput(target)) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+        this.ensureElementState(target);
+        this.scheduleAllOverlaysUpdate();
+    },
+
+    handleFocusOut(e) {
+        if (!this.active) return;
+        const target = e.target;
+        if (!this.isTextInput(target)) return;
+        // Keep overlay installed; just refresh position once (layout may change on blur).
+        const st = this.stateByEl.get(target);
+        if (st) this.updateOverlay(st);
+    },
+
+    handleInput(e) {
+        if (!this.active || this.maxDelayMs <= 0) return;
         const target = e.target;
         if (!this.isTextInput(target)) return;
         if (target instanceof HTMLElement && target.isContentEditable) return;
 
-        const text = e.clipboardData?.getData('text');
-        if (typeof text !== 'string') return;
+        const st = this.ensureElementState(target);
+        this.enqueueValue(st, target.value || '');
+        this.updateOverlay(st);
+    },
 
-        e.preventDefault();
-        e.stopImmediatePropagation();
+    handleAnyScroll(e) {
+        if (!this.active) return;
+        const target = e.target;
+        if (this.isTextInput(target)) {
+            const st = this.stateByEl.get(target);
+            if (st) this.updateOverlay(st);
+            return;
+        }
 
-        setTimeout(() => {
-            try {
-                const start = target.selectionStart ?? 0;
-                const end = target.selectionEnd ?? start;
-                target.setRangeText(text, start, end, 'end');
-                target.dispatchEvent(new Event('input', { bubbles: true }));
-            } catch (_) {
-                // no-op
-            }
-        }, this.delayMs);
-    }
+        // Page/container scroll: keep overlays glued to their inputs.
+        this.scheduleAllOverlaysUpdate();
+    },
 };
 
 const InteractionManager = {
