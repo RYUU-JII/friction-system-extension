@@ -36,8 +36,10 @@ function mergeFilterSettings(partial) {
 
     return merged;
 }
-const TRACKING_INTERVAL_MS = 20000; // 20초
-const MAX_ELAPSED_LIMIT = TRACKING_INTERVAL_MS * 1.5;
+// Tracking is driven by a 1-minute chrome.alarms tick (plus tab/window events).
+// Keep the clamp aligned with that cadence to avoid systematic under-counting.
+const TRACKING_INTERVAL_MS = 60_000; // 1 minute
+const MAX_ELAPSED_LIMIT = TRACKING_INTERVAL_MS * 2;
 const MAX_DAYS_STORED = 30;
 
 let statsCache = { dates: {} };

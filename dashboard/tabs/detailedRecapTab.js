@@ -1,5 +1,5 @@
 import { getDailyData, getWeeklyData } from '../../dataManager.js';
-import { formatTime, getTodayDateStr } from '../../utils/utils.js';
+import { formatTime, getLocalDateStr, getTodayDateStr } from '../../utils/utils.js';
 
 function formatBlockedInsight(blockedMs, totalMs) {
   if (!totalMs || totalMs <= 0) return '기록된 사용 시간이 없어요.';
@@ -233,12 +233,12 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
 
   function renderDailyGraph(dateStr) {
     const { currentStats, currentBlockedUrls } = getState();
-    const { hourly, hourlyBlocked, total, blocked, change } = getDailyData(currentStats, dateStr, currentBlockedUrls);
+    const { hourly, hourlyBlocked, total, blocked, change, topByHour } = getDailyData(currentStats, dateStr, currentBlockedUrls);
 
     if (UI.dailyTotal) UI.dailyTotal.textContent = formatTime(total);
     if (UI.dailyBlocked) UI.dailyBlocked.textContent = formatTime(blocked);
     if (UI.dailyChange) {
-      UI.dailyChange.textContent = change.startsWith('-') ? change : `+${change}`;
+      UI.dailyChange.textContent = change;
       UI.dailyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
     }
 
@@ -281,7 +281,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
       const blockedPct = time > 0 ? (blockedTime / time) * 100 : 0;
       const safePct = time > 0 ? (safeTime / time) * 100 : 0;
       const tooltip = `${h}시\n총 ${formatTime(time)}\n차단 ${formatTime(blockedTime)} (${Math.round(blockedPct)}%)`;
-      const topHtml = buildTopSitesHtml(top3ByHour(h));
+      const topHtml = buildTopSitesHtml(Array.isArray(topByHour?.[h]) ? topByHour[h] : top3ByHour(h));
       const tooltipHtml = `
         <div class="tooltip-title">${h}시</div>
         <div class="tooltip-line">총 ${escapeHtml(formatTime(time))}</div>
@@ -329,7 +329,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
     if (UI.weeklyTotal) UI.weeklyTotal.textContent = formatTime(total);
     if (UI.weeklyBlocked) UI.weeklyBlocked.textContent = formatTime(blocked);
     if (UI.weeklyChange) {
-      UI.weeklyChange.textContent = change.startsWith('-') ? change : `+${change}`;
+      UI.weeklyChange.textContent = change;
       UI.weeklyChange.style.color = change.startsWith('-') ? 'var(--color-safe)' : 'var(--color-blocked)';
     }
 
@@ -403,7 +403,7 @@ export function createDetailedRecapTab({ UI, getState, onToggleBlockDomain }) {
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = getLocalDateStr(d.getTime());
       const domains = currentStats?.dates?.[dateStr]?.domains || {};
       for (const [domain, data] of Object.entries(domains)) {
         const prev = totalsByDomain.get(domain) || 0;
