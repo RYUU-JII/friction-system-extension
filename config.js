@@ -27,6 +27,7 @@ export const CONFIG_DEFAULT_FILTER_SETTINGS = {
     clickDelay: { isActive: true, value: CONFIG_DEFAULT_CLICK_DELAY_MS },
     scrollFriction: { isActive: true, value: CONFIG_DEFAULT_SCROLL_FRICTION_MS },
     desaturation: { isActive: true, value: CONFIG_DEFAULT_DESATURATION_VALUE },
+    hoverReveal: { isActive: true, value: '' },
     letterSpacing: { isActive: true, value: CONFIG_DEFAULT_LETTER_SPACING_VALUE },
     textOpacity: { isActive: false, value: CONFIG_DEFAULT_TEXT_OPACITY_VALUE },
     textBlur: { isActive: false, value: CONFIG_DEFAULT_TEXT_BLUR_VALUE },
