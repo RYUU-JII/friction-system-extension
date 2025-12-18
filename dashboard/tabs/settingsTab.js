@@ -647,6 +647,8 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     const settings = getSettings();
     const token = ++settingsPreviewUpdateToken;
 
+    UI.settingsPreview.classList.toggle('is-hover-reveal-enabled', !!settings?.hoverReveal?.isActive);
+
     clearFrames();
 
     if (currentSettingsSubtab === 'media') {
@@ -797,6 +799,23 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   function setup() {
     setupMediaPreviewHoverAudio();
 
+    if (UI.hoverRevealToggle) {
+      UI.hoverRevealToggle.addEventListener('change', () => {
+        const current = getSettings() || {};
+        const prev = current.hoverReveal && typeof current.hoverReveal === 'object' ? current.hoverReveal : null;
+        const next = {
+          ...current,
+          hoverReveal: {
+            isActive: !!UI.hoverRevealToggle.checked,
+            value: prev?.value ?? '',
+          },
+        };
+
+        setSettings(next);
+        updateSettingsPreviewV2();
+      });
+    }
+
     if (UI.settingsSubtabButtons) {
       UI.settingsSubtabButtons.forEach((btn) => {
         btn.addEventListener('click', () => setActiveSettingsSubtabV2(btn.dataset.settingsSubtab));
@@ -898,6 +917,10 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   async function display() {
     syncSettingsSubtabUI();
     applySettingsSubtabVisibility();
+
+    if (UI.hoverRevealToggle) {
+      UI.hoverRevealToggle.checked = !!getSettings()?.hoverReveal?.isActive;
+    }
 
     if (currentSettingsSubtab === 'game') {
       syncNudgeDebugOutputs();
