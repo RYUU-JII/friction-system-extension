@@ -78,6 +78,7 @@ const VisualManager = {
     _videoHoverScopes: new Set(),
     _videoObserver: null,
     _trackVideoContainers: false,
+    _trackVideoHoverScopes: false,
 
     _clearVideoContainers() {
         for (const el of this._videoContainers) {
@@ -93,6 +94,7 @@ const VisualManager = {
             this._videoObserver = null;
         }
         this._trackVideoContainers = false;
+        this._trackVideoHoverScopes = false;
     },
 
     _markVideoContainer(videoEl) {
@@ -151,11 +153,11 @@ const VisualManager = {
     },
 
     _markVideoTracking(videoEl) {
-        this._markVideoHoverScope(videoEl);
+        if (this._trackVideoHoverScopes) this._markVideoHoverScope(videoEl);
         if (this._trackVideoContainers) this._markVideoContainer(videoEl);
     },
 
-    _ensureVideoContainerTracking({ trackContainers } = {}) {
+    _ensureVideoContainerTracking({ trackContainers, trackHoverScopes } = {}) {
         const nextTrackContainers = !!trackContainers;
         if (!nextTrackContainers && this._videoContainers.size > 0) {
             for (const el of this._videoContainers) {
@@ -164,6 +166,20 @@ const VisualManager = {
             this._videoContainers.clear();
         }
         this._trackVideoContainers = nextTrackContainers;
+
+        const nextTrackHoverScopes = !!trackHoverScopes;
+        if (!nextTrackHoverScopes && this._videoHoverScopes.size > 0) {
+            for (const el of this._videoHoverScopes) {
+                try { el.removeAttribute('data-friction-video-hover-scope'); } catch (e) {}
+            }
+            this._videoHoverScopes.clear();
+        }
+        this._trackVideoHoverScopes = nextTrackHoverScopes;
+
+        if (!this._trackVideoContainers && !this._trackVideoHoverScopes) {
+            this._clearVideoContainers();
+            return;
+        }
 
         document.querySelectorAll('video').forEach((v) => this._markVideoTracking(v));
 
@@ -194,6 +210,8 @@ const VisualManager = {
         const desat = filters.desaturation;
         const mediaBrightness = filters.mediaBrightness;
         const mediaOpacity = filters.mediaOpacity;
+        const hoverRevealSetting = filters.hoverReveal;
+        const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
 
         const isActive =
             (blur && blur.isActive) ||
@@ -207,13 +225,24 @@ const VisualManager = {
         }
 
         const baseFilterValues = [];
-        if (blur && blur.isActive) baseFilterValues.push(`blur(${blur.value})`);
-        if (desat && desat.isActive) baseFilterValues.push(`grayscale(${desat.value})`);
+        const baseNeutralFilterValues = [];
+        if (blur && blur.isActive) {
+            baseFilterValues.push(`blur(${blur.value})`);
+            baseNeutralFilterValues.push('blur(0px)');
+        }
+        if (desat && desat.isActive) {
+            baseFilterValues.push(`grayscale(${desat.value})`);
+            baseNeutralFilterValues.push('grayscale(0%)');
+        }
 
         const brightnessFilter = mediaBrightness && mediaBrightness.isActive ? `brightness(${mediaBrightness.value})` : '';
         const combinedFilterParts = baseFilterValues.concat(brightnessFilter ? [brightnessFilter] : []);
         const combinedFilter = combinedFilterParts.length > 0 ? combinedFilterParts.join(' ') : 'none';
         const videoLeafFilter = baseFilterValues.length > 0 ? baseFilterValues.join(' ') : 'none';
+
+        const combinedNeutralFilterParts = baseNeutralFilterValues.concat(brightnessFilter ? ['brightness(100%)'] : []);
+        const combinedNeutralFilter = combinedNeutralFilterParts.length > 0 ? combinedNeutralFilterParts.join(' ') : 'none';
+        const videoLeafNeutralFilter = baseNeutralFilterValues.length > 0 ? baseNeutralFilterValues.join(' ') : 'none';
         
         let style = document.getElementById(STYLES.VISUAL.ID);
         if (!style) {
@@ -227,62 +256,82 @@ const VisualManager = {
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const opacityRule = mediaOpacity && mediaOpacity.isActive ? `opacity: ${mediaOpacity.value} !important;` : '';
 
-        const shouldTrackVideoHoverScopes = baseFilterValues.length > 0;
+        const shouldTrackVideoHoverScopes = hoverRevealEnabled && baseFilterValues.length > 0;
         const shouldTrackVideoContainers = !!(mediaBrightness && mediaBrightness.isActive) || !!(mediaOpacity && mediaOpacity.isActive);
         if (shouldTrackVideoHoverScopes || shouldTrackVideoContainers) {
-            this._ensureVideoContainerTracking({ trackContainers: shouldTrackVideoContainers });
+            this._ensureVideoContainerTracking({
+                trackContainers: shouldTrackVideoContainers,
+                trackHoverScopes: shouldTrackVideoHoverScopes,
+            });
         }
         else this._clearVideoContainers();
 
+        const visualTargetFilterRule = combinedFilterParts.length > 0 ? `filter: ${combinedFilter} !important;` : '';
+        const videoTargetFilterRule = baseFilterValues.length > 0 ? `filter: ${videoLeafFilter} !important;` : '';
+        const videoContainerFilterRule = brightnessFilter ? `filter: ${brightnessFilter} !important;` : '';
+
+        const hoverVisualFilterResetRule =
+            combinedFilterParts.length > 0 ? `filter: ${combinedNeutralFilter} !important;` : '';
+        const hoverVideoFilterResetRule = baseFilterValues.length > 0 ? `filter: ${videoLeafNeutralFilter} !important;` : '';
+        const hoverContainerFilterResetRule =
+            mediaBrightness && mediaBrightness.isActive ? 'filter: brightness(100%) !important;' : '';
+
+        const hoverVisualOpacityResetRule =
+            mediaOpacity && mediaOpacity.isActive
+                ? `opacity: ${combinedFilterParts.length > 0 ? '1' : '0.999'} !important;`
+                : '';
+        const hoverContainerOpacityResetRule =
+            mediaOpacity && mediaOpacity.isActive
+                ? `opacity: ${mediaBrightness && mediaBrightness.isActive ? '1' : '0.999'} !important;`
+                : '';
+        const overlayOpacityResetRule = mediaOpacity && mediaOpacity.isActive ? 'opacity: 1 !important;' : '';
+
         style.textContent = `
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS} {
-                filter: ${combinedFilter} !important;
+                ${visualTargetFilterRule}
                 ${opacityRule}
-                transition: filter 0.1s ease, opacity 0.1s ease;
                 /* will-change: filter; 제거 */
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:hover ${SELECTORS.VISUAL_VIDEO_TARGETS} {
-                filter: none !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:hover ${SELECTORS.VISUAL_VIDEO_TARGETS} {
+                ${hoverVideoFilterResetRule}
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:has(:hover) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
-                filter: none !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:has(:hover) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
+                ${hoverVideoFilterResetRule}
             }
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
-                filter: ${videoLeafFilter} !important;
-                opacity: 1 !important;
-                transition: filter 0.1s ease;
+                ${videoTargetFilterRule}
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS}:hover {
-                filter: none !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS}:hover {
+                ${hoverVideoFilterResetRule}
             }
             html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"] {
-                filter: ${brightnessFilter ? brightnessFilter : 'none'} !important;
+                ${videoContainerFilterRule}
                 ${opacityRule}
-                transition: filter 0.1s ease, opacity 0.1s ease;
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:hover {
-                filter: none !important;
-                opacity: 1 !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:hover {
+                ${hoverVisualFilterResetRule}
+                ${hoverVisualOpacityResetRule}
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:hover {
-                filter: none !important;
-                opacity: 1 !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:hover {
+                ${hoverContainerFilterResetRule}
+                ${hoverContainerOpacityResetRule}
             }
             /* 이중 필터 버그 수정: 자식 요소가 호버되면 부모 필터도 해제 */
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:has(:hover) {
-                filter: none !important;
-                opacity: 1 !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:has(:hover) {
+                ${hoverVisualFilterResetRule}
+                ${hoverVisualOpacityResetRule}
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:has(:hover) {
-                filter: none !important;
-                opacity: 1 !important;
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:has(:hover) {
+                ${hoverContainerFilterResetRule}
+                ${hoverContainerOpacityResetRule}
             }
 
             /* 오버레이/모달은 시각 필터에서 제외: X 사진 팝업이 "열리지만 안 보이는" 현상 방지 */
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt},
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} * {
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} ${SELECTORS.VISUAL_TARGETS},
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} ${SELECTORS.VISUAL_VIDEO_TARGETS},
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} [data-friction-video-container="1"] {
                 filter: none !important;
-                opacity: 1 !important;
+                ${overlayOpacityResetRule}
             }
         `;
         setRootAttribute(STYLES.VISUAL.ATTR, 'active');
@@ -357,12 +406,12 @@ const TextManager = {
         const hoverResetRules = (() => {
             const parts = [];
             if (opacityValue) parts.push('opacity: 1 !important;');
-            if (blurValue) parts.push('filter: none !important;');
+            if (blurValue) parts.push('filter: blur(0px) !important;');
             if (shadowValue) parts.push('text-shadow: none !important;');
             if (parts.length === 0) return '';
             return `
-                ${SELECTORS.TEXT_VISUAL_TARGETS}:hover,
-                ${SELECTORS.TEXT_VISUAL_TARGETS}:has(:hover) {
+                html[data-friction-hover-reveal="1"] ${SELECTORS.TEXT_VISUAL_TARGETS}:hover,
+                html[data-friction-hover-reveal="1"] ${SELECTORS.TEXT_VISUAL_TARGETS}:has(:hover) {
                     ${parts.join('\n                    ')}
                 }
             `;
@@ -1867,6 +1916,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           InputDelayManager.remove();
           InteractionManager.removeClickDelay();
           InteractionManager.removeScroll();
+          removeRootAttribute('data-friction-hover-reveal');
           if (NudgeGame.isActive() && NudgeGame.getMode() !== 'debug') {
               NudgeGame.stop();
           }
@@ -1876,7 +1926,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (!request || !request.filters) return;
     const { filters } = request;
-    
+
+    const hoverRevealSetting = filters.hoverReveal;
+    const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
+    if (hoverRevealEnabled) setRootAttribute('data-friction-hover-reveal', '1');
+    else removeRootAttribute('data-friction-hover-reveal');
+     
     VisualManager.update(filters);
 
     if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
@@ -1908,11 +1963,12 @@ chrome.storage.local.get({
           blur: { isActive: false, value: '1.5px' },
           delay: { isActive: false, value: '0.5s' },
           clickDelay: { isActive: false, value: 1000 },
-          scrollFriction: { isActive: false, value: 50 },
-          desaturation: { isActive: false, value: '50%' },
-          letterSpacing: { isActive: false, value: '0.1em' },
-          textOpacity: { isActive: false, value: '0.9' },
-          textBlur: { isActive: false, value: '0.3px' },
+           scrollFriction: { isActive: false, value: 50 },
+           desaturation: { isActive: false, value: '50%' },
+           hoverReveal: { isActive: true, value: '' },
+           letterSpacing: { isActive: false, value: '0.1em' },
+           textOpacity: { isActive: false, value: '0.9' },
+           textBlur: { isActive: false, value: '0.3px' },
           lineHeight: { isActive: false, value: '1.45' },
           textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
           textShuffle: { isActive: false, value: 0.15 },
@@ -1929,6 +1985,10 @@ chrome.storage.local.get({
 
       if (isBlocked && isTimeActive) {
           const filters = items.filterSettings;
+          const hoverRevealSetting = filters.hoverReveal;
+          const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
+          if (hoverRevealEnabled) setRootAttribute('data-friction-hover-reveal', '1');
+          else removeRootAttribute('data-friction-hover-reveal');
           TextManager.update(filters);
           TextShuffleManager.update(filters.textShuffle);
           if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
