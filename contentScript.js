@@ -47,7 +47,10 @@ const SELECTORS = {
     // VISUAL_TARGETS: "틀(컨테이너)"이 아닌 "콘텐츠(미디어/이미지)"에만 적용해 중첩 필터(누적 blur/grayscale)를 방지합니다.
     // - 컨테이너(예: article, p, li, a 등)에 filter를 걸면 자식까지 합성되어 단계적으로 옅어지는 현상이 생길 수 있습니다.
     // - X(트위터) 모달/포토 뷰어도 컨테이너 filter에 의해 "열리지만 안 보이는" 문제가 발생할 수 있어, 타겟을 leaf로 제한합니다.
-    VISUAL_TARGETS: ':is(img, picture, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
+    // NOTE: Twitter/X's image cards often include BOTH a background-image layer and a nested <img>.
+    // Filtering both creates a "double layer" where hover reset only affects one, so the image looks like it didn't unfilter.
+    // Prefer the background-image layer under [data-testid="tweetPhoto"] and exclude the nested <img> from VISUAL_TARGETS.
+    VISUAL_TARGETS: ':is(img:not([data-testid="tweetPhoto"] img), picture, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
     VISUAL_VIDEO_TARGETS: ':is(video)',
     
     // INTERACTIVE_TARGETS는 네비게이션 및 인터랙션 요소를 포괄하도록 확장되었습니다.
@@ -74,17 +77,11 @@ const removeRootAttribute = (attr) => {
 };
 
 const VisualManager = {
-    _videoContainers: new Set(),
     _videoHoverScopes: new Set(),
     _videoObserver: null,
-    _trackVideoContainers: false,
     _trackVideoHoverScopes: false,
 
     _clearVideoContainers() {
-        for (const el of this._videoContainers) {
-            try { el.removeAttribute('data-friction-video-container'); } catch (e) {}
-        }
-        this._videoContainers.clear();
         for (const el of this._videoHoverScopes) {
             try { el.removeAttribute('data-friction-video-hover-scope'); } catch (e) {}
         }
@@ -93,80 +90,34 @@ const VisualManager = {
             try { this._videoObserver.disconnect(); } catch (e) {}
             this._videoObserver = null;
         }
-        this._trackVideoContainers = false;
         this._trackVideoHoverScopes = false;
-    },
-
-    _markVideoContainer(videoEl) {
-        const parent = videoEl && videoEl.parentElement;
-        if (!parent || parent === document.documentElement || parent === document.body) return;
-        parent.setAttribute('data-friction-video-container', '1');
-        this._videoContainers.add(parent);
     },
 
     _markVideoHoverScope(videoEl) {
         if (!videoEl || !(videoEl instanceof Element)) return;
 
-        let videoRect = null;
-        try {
-            videoRect = videoEl.getBoundingClientRect();
-        } catch (_) {
-            // ignore
-        }
-
         const mark = (el) => {
             if (!el || el === document.documentElement || el === document.body) return false;
-            try { el.setAttribute('data-friction-video-hover-scope', '1'); } catch (e) { return false; }
+            try { el.setAttribute('data-friction-video-hover-scope', '1'); } catch (_) { return false; }
             this._videoHoverScopes.add(el);
             return true;
         };
 
-        const parent = videoEl.parentElement;
-        if (!parent || parent === document.documentElement || parent === document.body) return;
-        mark(parent);
-
-        let current = parent.parentElement;
-        let markedExtra = 0;
-        while (current && markedExtra < 2 && current !== document.documentElement && current !== document.body) {
-            if (!videoRect || !videoRect.width || !videoRect.height) break;
-
-            let rect = null;
-            try {
-                rect = current.getBoundingClientRect();
-            } catch (_) {
-                break;
-            }
-            if (!rect || !rect.width || !rect.height) break;
-
-            const videoArea = videoRect.width * videoRect.height;
-            const currentArea = rect.width * rect.height;
-
-            const areaOk = currentArea <= videoArea * 3;
-            const widthOk = rect.width <= videoRect.width * 1.8;
-            const heightOk = rect.height <= videoRect.height * 2.2;
-            if (!areaOk || !widthOk || !heightOk) break;
-
+        // Mark a small chain so that hovering video overlays/controls still reveals the video.
+        let current = videoEl.parentElement;
+        let steps = 0;
+        while (current && steps < 3 && current !== document.documentElement && current !== document.body) {
             mark(current);
-            markedExtra += 1;
+            steps += 1;
             current = current.parentElement;
         }
     },
 
     _markVideoTracking(videoEl) {
         if (this._trackVideoHoverScopes) this._markVideoHoverScope(videoEl);
-        if (this._trackVideoContainers) this._markVideoContainer(videoEl);
     },
 
-    _ensureVideoContainerTracking({ trackContainers, trackHoverScopes } = {}) {
-        const nextTrackContainers = !!trackContainers;
-        if (!nextTrackContainers && this._videoContainers.size > 0) {
-            for (const el of this._videoContainers) {
-                try { el.removeAttribute('data-friction-video-container'); } catch (e) {}
-            }
-            this._videoContainers.clear();
-        }
-        this._trackVideoContainers = nextTrackContainers;
-
+    _ensureVideoContainerTracking({ trackHoverScopes } = {}) {
         const nextTrackHoverScopes = !!trackHoverScopes;
         if (!nextTrackHoverScopes && this._videoHoverScopes.size > 0) {
             for (const el of this._videoHoverScopes) {
@@ -176,7 +127,7 @@ const VisualManager = {
         }
         this._trackVideoHoverScopes = nextTrackHoverScopes;
 
-        if (!this._trackVideoContainers && !this._trackVideoHoverScopes) {
+        if (!this._trackVideoHoverScopes) {
             this._clearVideoContainers();
             return;
         }
@@ -208,16 +159,12 @@ const VisualManager = {
     update(filters) {
         const blur = filters.blur;
         const desat = filters.desaturation;
-        const mediaBrightness = filters.mediaBrightness;
-        const mediaOpacity = filters.mediaOpacity;
         const hoverRevealSetting = filters.hoverReveal;
         const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
 
         const isActive =
             (blur && blur.isActive) ||
-            (desat && desat.isActive) ||
-            (mediaBrightness && mediaBrightness.isActive) ||
-            (mediaOpacity && mediaOpacity.isActive);
+            (desat && desat.isActive);
 
         if (!isActive) {
             this.remove();
@@ -235,12 +182,11 @@ const VisualManager = {
             baseNeutralFilterValues.push('grayscale(0%)');
         }
 
-        const brightnessFilter = mediaBrightness && mediaBrightness.isActive ? `brightness(${mediaBrightness.value})` : '';
-        const combinedFilterParts = baseFilterValues.concat(brightnessFilter ? [brightnessFilter] : []);
+        const combinedFilterParts = baseFilterValues;
         const combinedFilter = combinedFilterParts.length > 0 ? combinedFilterParts.join(' ') : 'none';
         const videoLeafFilter = baseFilterValues.length > 0 ? baseFilterValues.join(' ') : 'none';
 
-        const combinedNeutralFilterParts = baseNeutralFilterValues.concat(brightnessFilter ? ['brightness(100%)'] : []);
+        const combinedNeutralFilterParts = baseNeutralFilterValues;
         const combinedNeutralFilter = combinedNeutralFilterParts.length > 0 ? combinedNeutralFilterParts.join(' ') : 'none';
         const videoLeafNeutralFilter = baseNeutralFilterValues.length > 0 ? baseNeutralFilterValues.join(' ') : 'none';
         
@@ -254,84 +200,51 @@ const VisualManager = {
         // ✨ 핵심 수정: html 태그의 속성을 확인하고, will-change를 제거했습니다.
         // ✨ 핵심 추가: :has(:hover)를 통해 이중 필터링을 방지합니다.
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
-        const opacityRule = mediaOpacity && mediaOpacity.isActive ? `opacity: ${mediaOpacity.value} !important;` : '';
 
         const shouldTrackVideoHoverScopes = hoverRevealEnabled && baseFilterValues.length > 0;
-        const shouldTrackVideoContainers = !!(mediaBrightness && mediaBrightness.isActive) || !!(mediaOpacity && mediaOpacity.isActive);
-        if (shouldTrackVideoHoverScopes || shouldTrackVideoContainers) {
-            this._ensureVideoContainerTracking({
-                trackContainers: shouldTrackVideoContainers,
-                trackHoverScopes: shouldTrackVideoHoverScopes,
-            });
-        }
+        if (shouldTrackVideoHoverScopes) this._ensureVideoContainerTracking({ trackHoverScopes: true });
         else this._clearVideoContainers();
 
         const visualTargetFilterRule = combinedFilterParts.length > 0 ? `filter: ${combinedFilter} !important;` : '';
         const videoTargetFilterRule = baseFilterValues.length > 0 ? `filter: ${videoLeafFilter} !important;` : '';
-        const videoContainerFilterRule = brightnessFilter ? `filter: ${brightnessFilter} !important;` : '';
-
         const hoverVisualFilterResetRule =
             combinedFilterParts.length > 0 ? `filter: ${combinedNeutralFilter} !important;` : '';
         const hoverVideoFilterResetRule = baseFilterValues.length > 0 ? `filter: ${videoLeafNeutralFilter} !important;` : '';
-        const hoverContainerFilterResetRule =
-            mediaBrightness && mediaBrightness.isActive ? 'filter: brightness(100%) !important;' : '';
 
-        const hoverVisualOpacityResetRule =
-            mediaOpacity && mediaOpacity.isActive
-                ? `opacity: ${combinedFilterParts.length > 0 ? '1' : '0.999'} !important;`
-                : '';
-        const hoverContainerOpacityResetRule =
-            mediaOpacity && mediaOpacity.isActive
-                ? `opacity: ${mediaBrightness && mediaBrightness.isActive ? '1' : '0.999'} !important;`
-                : '';
-        const overlayOpacityResetRule = mediaOpacity && mediaOpacity.isActive ? 'opacity: 1 !important;' : '';
+        HoverRevealManager.update({ enabled: hoverRevealEnabled && combinedFilterParts.length > 0 });
 
         style.textContent = `
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS} {
                 ${visualTargetFilterRule}
-                ${opacityRule}
+                transition: filter 0.15s ease;
                 /* will-change: filter; 제거 */
-            }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:hover ${SELECTORS.VISUAL_VIDEO_TARGETS} {
-                ${hoverVideoFilterResetRule}
-            }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-hover-scope="1"]:has(:hover) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
-                ${hoverVideoFilterResetRule}
             }
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS} {
                 ${videoTargetFilterRule}
+                transition: filter 0.15s ease;
             }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_VIDEO_TARGETS}:hover {
+
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-reveal="1"] {
+                ${hoverVisualFilterResetRule}
+            }
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-reveal="1"] ${SELECTORS.VISUAL_TARGETS} {
+                ${hoverVisualFilterResetRule}
+            }
+            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-reveal="1"] ${SELECTORS.VISUAL_VIDEO_TARGETS} {
                 ${hoverVideoFilterResetRule}
             }
-            html:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"] {
-                ${videoContainerFilterRule}
-                ${opacityRule}
-            }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:hover {
-                ${hoverVisualFilterResetRule}
-                ${hoverVisualOpacityResetRule}
-            }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:hover {
-                ${hoverContainerFilterResetRule}
-                ${hoverContainerOpacityResetRule}
-            }
+
+
+
             /* 이중 필터 버그 수정: 자식 요소가 호버되면 부모 필터도 해제 */
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) ${SELECTORS.VISUAL_TARGETS}:has(:hover) {
-                ${hoverVisualFilterResetRule}
-                ${hoverVisualOpacityResetRule}
-            }
-            html[data-friction-hover-reveal="1"]:not([${STYLES.VISUAL.ATTR}="none"]) [data-friction-video-container="1"]:has(:hover) {
-                ${hoverContainerFilterResetRule}
-                ${hoverContainerOpacityResetRule}
-            }
+
+
 
             /* 오버레이/모달은 시각 필터에서 제외: X 사진 팝업이 "열리지만 안 보이는" 현상 방지 */
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} ${SELECTORS.VISUAL_TARGETS},
             html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} ${SELECTORS.VISUAL_VIDEO_TARGETS},
-            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} [data-friction-video-container="1"] {
+            html:not([${STYLES.VISUAL.ATTR}="none"]) ${overlayExempt} {
                 filter: none !important;
-                ${overlayOpacityResetRule}
             }
         `;
         setRootAttribute(STYLES.VISUAL.ATTR, 'active');
@@ -342,7 +255,73 @@ const VisualManager = {
         if (style) style.remove();
         setRootAttribute(STYLES.VISUAL.ATTR, 'none');
         this._clearVideoContainers();
+        HoverRevealManager.update({ enabled: false });
     }
+};
+
+const HoverRevealManager = {
+    enabled: false,
+    currentScope: null,
+    boundPointerOver: null,
+    boundPointerOut: null,
+
+    update({ enabled } = {}) {
+        const nextEnabled = !!enabled;
+        if (nextEnabled === this.enabled) return;
+        this.enabled = nextEnabled;
+        if (nextEnabled) this.enable();
+        else this.disable();
+    },
+
+    enable() {
+        if (this.boundPointerOver || this.boundPointerOut) return;
+
+        this.boundPointerOver = (e) => {
+            if (!this.enabled) return;
+
+            const target = e?.target;
+            if (!(target instanceof Element)) return;
+
+            // Prefer known media containers first (X/Twitter), then video scopes, then leaf media elements.
+            const scope =
+                target.closest('[data-testid="tweetPhoto"]') ||
+                target.closest('[data-friction-video-hover-scope="1"]') ||
+                target.closest('img, picture, canvas, svg, video, [role="img"], [style*="background-image"]');
+
+            if (!scope || scope === this.currentScope) return;
+
+            this.clear();
+            this.currentScope = scope;
+            try { scope.setAttribute('data-friction-reveal', '1'); } catch (_) {}
+        };
+
+        this.boundPointerOut = (e) => {
+            if (!this.enabled) return;
+            if (!this.currentScope) return;
+
+            const related = e?.relatedTarget;
+            if (related instanceof Node && this.currentScope.contains(related)) return;
+
+            this.clear();
+        };
+
+        document.addEventListener('pointerover', this.boundPointerOver, true);
+        document.addEventListener('pointerout', this.boundPointerOut, true);
+    },
+
+    disable() {
+        if (this.boundPointerOver) document.removeEventListener('pointerover', this.boundPointerOver, true);
+        if (this.boundPointerOut) document.removeEventListener('pointerout', this.boundPointerOut, true);
+        this.boundPointerOver = null;
+        this.boundPointerOut = null;
+        this.clear();
+    },
+
+    clear() {
+        if (!this.currentScope) return;
+        try { this.currentScope.removeAttribute('data-friction-reveal'); } catch (_) {}
+        this.currentScope = null;
+    },
 };
 
 const DelayManager = {
@@ -373,14 +352,12 @@ const TextManager = {
     update(filters) {
         const spacing = filters.letterSpacing;
         const lineHeight = filters.lineHeight;
-        const textOpacity = filters.textOpacity;
         const textBlur = filters.textBlur;
         const textShadow = filters.textShadow;
 
         const isActive =
             (spacing && spacing.isActive) ||
             (lineHeight && lineHeight.isActive) ||
-            (textOpacity && textOpacity.isActive) ||
             (textBlur && textBlur.isActive) ||
             (textShadow && textShadow.isActive);
 
@@ -399,13 +376,11 @@ const TextManager = {
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const spacingValue = spacing && spacing.isActive ? spacing.value : 'normal';
         const lineHeightValue = lineHeight && lineHeight.isActive ? lineHeight.value : 'normal';
-        const opacityValue = textOpacity && textOpacity.isActive ? textOpacity.value : null;
         const blurValue = textBlur && textBlur.isActive ? textBlur.value : null;
         const shadowValue = textShadow && textShadow.isActive ? textShadow.value : null;
 
         const hoverResetRules = (() => {
             const parts = [];
-            if (opacityValue) parts.push('opacity: 1 !important;');
             if (blurValue) parts.push('filter: blur(0px) !important;');
             if (shadowValue) parts.push('text-shadow: none !important;');
             if (parts.length === 0) return '';
@@ -417,13 +392,12 @@ const TextManager = {
             `;
         })();
 
-        const visualTextRules = (opacityValue || blurValue || shadowValue)
+        const visualTextRules = (blurValue || shadowValue)
             ? `
                 ${SELECTORS.TEXT_VISUAL_TARGETS} {
-                    ${opacityValue ? `opacity: ${opacityValue} !important;` : ''}
                     ${blurValue ? `filter: blur(${blurValue}) !important;` : ''}
                     ${shadowValue ? `text-shadow: ${shadowValue} !important;` : ''}
-                    transition: opacity 0.15s ease, filter 0.15s ease, text-shadow 0.15s ease;
+                    transition: filter 0.15s ease, text-shadow 0.15s ease;
                 }
                 ${hoverResetRules}
             `
@@ -440,7 +414,6 @@ const TextManager = {
             /* 오버레이/모달은 텍스트 시각 필터에서도 제외 */
             ${overlayExempt},
             ${overlayExempt} * {
-                opacity: 1 !important;
                 filter: none !important;
                 text-shadow: none !important;
                 letter-spacing: normal !important;
@@ -1965,16 +1938,13 @@ chrome.storage.local.get({
           clickDelay: { isActive: false, value: 1000 },
            scrollFriction: { isActive: false, value: 50 },
            desaturation: { isActive: false, value: '50%' },
-           hoverReveal: { isActive: true, value: '' },
-           letterSpacing: { isActive: false, value: '0.1em' },
-           textOpacity: { isActive: false, value: '0.9' },
-           textBlur: { isActive: false, value: '0.3px' },
-          lineHeight: { isActive: false, value: '1.45' },
-          textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
-          textShuffle: { isActive: false, value: 0.15 },
-          mediaOpacity: { isActive: false, value: '0.9' },
-          mediaBrightness: { isActive: false, value: '90%' },
-          inputDelay: { isActive: false, value: 120 },
+            hoverReveal: { isActive: true, value: '' },
+            letterSpacing: { isActive: false, value: '0.1em' },
+            textBlur: { isActive: false, value: '0.3px' },
+           lineHeight: { isActive: false, value: '1.45' },
+           textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
+           textShuffle: { isActive: false, value: 0.15 },
+           inputDelay: { isActive: false, value: 120 },
       } 
   }, (items) => {
     

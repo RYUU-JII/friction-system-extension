@@ -127,6 +127,9 @@ const SETTING_METADATA_V2 = {
   inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 40, placeholder: '120', min: '0', max: '500', step: '10' },
 };
 
+// Removed for stability/perf: opacity/brightness visual effects (kept only for backward compatibility with stored settings).
+const REMOVED_SETTING_KEYS = new Set(['mediaBrightness', 'mediaOpacity', 'textOpacity']);
+
 function pickRandom(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return null;
   return arr[Math.floor(Math.random() * arr.length)];
@@ -689,8 +692,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       const filterParts = [];
       if (settings?.blur?.isActive) filterParts.push(`blur(${settings.blur.value})`);
       if (settings?.desaturation?.isActive) filterParts.push(`saturate(calc(100% - ${settings.desaturation.value}))`);
-      if (settings?.mediaBrightness?.isActive) filterParts.push(`brightness(${settings.mediaBrightness.value})`);
-      if (settings?.mediaOpacity?.isActive) after.style.opacity = String(settings.mediaOpacity.value);
       if (filterParts.length > 0) after.style.filter = filterParts.join(' ');
 
       UI.previewBefore.appendChild(before);
@@ -719,7 +720,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
       if (settings?.letterSpacing?.isActive) after.style.letterSpacing = String(settings.letterSpacing.value);
       if (settings?.lineHeight?.isActive) after.style.lineHeight = String(settings.lineHeight.value);
-      if (settings?.textOpacity?.isActive) after.style.opacity = String(settings.textOpacity.value);
       if (settings?.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
       if (settings?.textBlur?.isActive) after.style.filter = `blur(${settings.textBlur.value})`;
 
@@ -744,7 +744,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     UI.settingsGrid.innerHTML = '';
 
     const entries = Object.entries(SETTING_METADATA_V2)
-      .filter(([, meta]) => meta.category === currentSettingsSubtab)
+      .filter(([key, meta]) => meta.category === currentSettingsSubtab && !REMOVED_SETTING_KEYS.has(key))
       .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
 
     const settings = getSettings() || {};
