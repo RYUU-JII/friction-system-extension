@@ -279,7 +279,39 @@ const HoverRevealManager = {
     lastClientX: null,
     lastClientY: null,
     rafId: null,
+    pendingClearTimer: null,
     _lastRevealSweepAt: 0,
+
+    _closestCrossShadow(startEl, selector) {
+        if (!(startEl instanceof Element)) return null;
+        if (!selector) return null;
+
+        let current = startEl;
+        while (current) {
+            try {
+                if (current.matches(selector)) return current;
+            } catch (_) {
+                return null;
+            }
+
+            if (current.parentElement) {
+                current = current.parentElement;
+                continue;
+            }
+
+            // Cross shadow root boundary (open shadow roots).
+            const root = current.getRootNode?.();
+            const host = root && root.host;
+            if (host instanceof Element) {
+                current = host;
+                continue;
+            }
+
+            break;
+        }
+
+        return null;
+    },
 
     _getBestVisualTargetAtPoint(clientX, clientY) {
         if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
@@ -315,13 +347,43 @@ const HoverRevealManager = {
         );
     },
 
+    _getSitePreferredScope(el) {
+        if (!(el instanceof Element)) return null;
+
+        const host = String(window.location?.hostname || '').toLowerCase();
+        const isYouTube = host === 'youtube.com' || host.endsWith('.youtube.com');
+        if (isYouTube) {
+            // YouTube hover previews often swap thumbnail -> video by inserting a <video> into the same "card" renderer.
+            // Prefer a stable renderer container so reveal stays active across the swap (prevents a brief filtered video flash).
+            return this._closestCrossShadow(
+                el,
+                [
+                    'ytd-rich-grid-media',
+                    'ytd-rich-item-renderer',
+                    'ytd-video-renderer',
+                    'ytd-grid-video-renderer',
+                    'ytd-compact-video-renderer',
+                    'ytd-playlist-video-renderer',
+                    'ytd-reel-video-renderer',
+                    'ytd-reel-item-renderer',
+                    'ytd-thumbnail',
+                    '#thumbnail',
+                    '[id="thumbnail"]',
+                ].join(', ')
+            );
+        }
+
+        return null;
+    },
+
     _getRevealScope(target, clientX, clientY) {
         // 1) Find the actual visual element under the pointer (works even when an overlay sibling intercepts events).
         const visualAtPoint = this._getBestVisualTargetAtPoint(clientX, clientY);
         if (visualAtPoint) {
             return (
-                visualAtPoint.closest('[data-testid="tweetPhoto"]') ||
-                visualAtPoint.closest('[data-friction-video-hover-scope="1"]') ||
+                this._getSitePreferredScope(visualAtPoint) ||
+                this._closestCrossShadow(visualAtPoint, '[data-testid="tweetPhoto"]') ||
+                this._closestCrossShadow(visualAtPoint, '[data-friction-video-hover-scope="1"]') ||
                 visualAtPoint
             );
         }
@@ -329,13 +391,34 @@ const HoverRevealManager = {
         // 2) Fallback: event target chain (works when the visual element itself receives events).
         if (target instanceof Element) {
             return (
-                target.closest('[data-testid="tweetPhoto"]') ||
-                target.closest('[data-friction-video-hover-scope="1"]') ||
-                target.closest('img, picture, canvas, svg, video, [role="img"], [style*="background-image"]')
+                this._getSitePreferredScope(target) ||
+                this._closestCrossShadow(target, '[data-testid="tweetPhoto"]') ||
+                this._closestCrossShadow(target, '[data-friction-video-hover-scope="1"]') ||
+                this._closestCrossShadow(target, 'img, picture, canvas, svg, video, [role="img"], [style*="background-image"]')
             );
         }
 
         return null;
+    },
+
+    _cancelPendingClear() {
+        if (!this.pendingClearTimer) return;
+        try { clearTimeout(this.pendingClearTimer); } catch (_) {}
+        this.pendingClearTimer = null;
+    },
+
+    _scheduleDeferredClear(delayMs = 80) {
+        if (!this.enabled) return;
+        if (!this.currentScope) return;
+
+        this._cancelPendingClear();
+        this.pendingClearTimer = setTimeout(() => {
+            this.pendingClearTimer = null;
+            if (!this.enabled) return;
+
+            // Re-evaluate based on current pointer position after UI transitions settle.
+            this._reconcile();
+        }, Math.max(0, Number(delayMs) || 0));
     },
 
     _scheduleReconcile() {
@@ -422,6 +505,8 @@ const HoverRevealManager = {
         this.boundPointerOver = (e) => {
             if (!this.enabled) return;
 
+            this._cancelPendingClear();
+
             const target = e?.target;
             if (!(target instanceof Element)) return;
 
@@ -449,9 +534,6 @@ const HoverRevealManager = {
             this.lastClientX = clientX;
             this.lastClientY = clientY;
 
-            const related = e?.relatedTarget;
-            if (related instanceof Node && this.currentScope.contains(related)) return;
-
             // If an overlay intercepts events, pointerout can fire even while still "visually" over the same media.
             const scopeAtPoint = this._getRevealScope(null, clientX, clientY);
             if (
@@ -463,7 +545,15 @@ const HoverRevealManager = {
                 return;
             }
 
-            this.clear();
+            // Fallback only when pointer coordinates are unavailable.
+            if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+                const related = e?.relatedTarget;
+                if (related instanceof Node && this.currentScope.contains(related)) return;
+            }
+
+            // During UI transitions (YouTube thumbnail -> preview video), pointerout can fire transiently.
+            // Keep the reveal mark briefly and re-check after the DOM settles to prevent flicker.
+            this._scheduleDeferredClear(100);
         };
 
         this.boundPointerCancel = () => {
@@ -516,6 +606,7 @@ const HoverRevealManager = {
             try { cancelAnimationFrame(this.rafId); } catch (_) {}
             this.rafId = null;
         }
+        this._cancelPendingClear();
         this.clear();
     },
 
@@ -554,15 +645,15 @@ const DelayManager = {
 const TextManager = {
     update(filters) {
         const spacing = filters.letterSpacing;
-        const lineHeight = filters.lineHeight;
         const textBlur = filters.textBlur;
         const textShadow = filters.textShadow;
+        const textOpacity = filters.textOpacity;
 
         const isActive =
             (spacing && spacing.isActive) ||
-            (lineHeight && lineHeight.isActive) ||
             (textBlur && textBlur.isActive) ||
-            (textShadow && textShadow.isActive);
+            (textShadow && textShadow.isActive) ||
+            (textOpacity && textOpacity.isActive);
 
         if (!isActive) {
             this.remove();
@@ -578,29 +669,32 @@ const TextManager = {
 
         const overlayExempt = ':is([role="dialog"], [aria-modal="true"])';
         const spacingValue = spacing && spacing.isActive ? spacing.value : 'normal';
-        const lineHeightValue = lineHeight && lineHeight.isActive ? lineHeight.value : 'normal';
         const blurValue = textBlur && textBlur.isActive ? textBlur.value : null;
         const shadowValue = textShadow && textShadow.isActive ? textShadow.value : null;
+        const rawOpacity = textOpacity && textOpacity.isActive ? parseFloat(String(textOpacity.value)) : null;
+        const opacityValue = Number.isFinite(rawOpacity) ? Math.max(0, Math.min(1, rawOpacity)) : null;
 
         const hoverResetRules = (() => {
             const parts = [];
             if (blurValue) parts.push('filter: blur(0px) !important;');
             if (shadowValue) parts.push('text-shadow: none !important;');
+            if (opacityValue !== null) parts.push('opacity: 1 !important;');
             if (parts.length === 0) return '';
             return `
-                html ${SELECTORS.TEXT_VISUAL_TARGETS}:hover,
-                html ${SELECTORS.TEXT_VISUAL_TARGETS}:has(:hover) {
+                html[data-friction-hover-reveal="1"] ${SELECTORS.TEXT_VISUAL_TARGETS}:hover,
+                html[data-friction-hover-reveal="1"] ${SELECTORS.TEXT_VISUAL_TARGETS}:has(:hover) {
                     ${parts.join('\n                    ')}
                 }
             `;
         })();
 
-        const visualTextRules = (blurValue || shadowValue)
+        const visualTextRules = (blurValue || shadowValue || opacityValue !== null)
             ? `
                 ${SELECTORS.TEXT_VISUAL_TARGETS} {
                     ${blurValue ? `filter: blur(${blurValue}) !important;` : ''}
                     ${shadowValue ? `text-shadow: ${shadowValue} !important;` : ''}
-                    transition: filter 0.15s ease, text-shadow 0.15s ease;
+                    ${opacityValue !== null ? `opacity: ${opacityValue} !important;` : ''}
+                    transition: filter 0.15s ease, text-shadow 0.15s ease, opacity 0.15s ease;
                 }
                 ${hoverResetRules}
             `
@@ -609,8 +703,7 @@ const TextManager = {
         style.textContent = `
             ${SELECTORS.TEXT_LAYOUT_TARGETS} {
                 letter-spacing: ${spacingValue} !important;
-                line-height: ${lineHeightValue} !important;
-                transition: letter-spacing 0.3s ease, line-height 0.3s ease;
+                transition: letter-spacing 0.3s ease;
             }
             ${visualTextRules}
 
@@ -619,6 +712,7 @@ const TextManager = {
             ${overlayExempt} * {
                 filter: none !important;
                 text-shadow: none !important;
+                opacity: 1 !important;
                 letter-spacing: normal !important;
                 line-height: normal !important;
             }
@@ -670,6 +764,7 @@ const TextShuffleManager = {
     shuffledTextByNode: new WeakMap(),
     hoverActiveRoot: null,
     hoverActiveNodes: new Set(),
+    hoverPreviewEnabled: true,
     boundPointerOver: null,
     boundPointerOut: null,
     observer: null,
@@ -678,10 +773,11 @@ const TextShuffleManager = {
     pendingTextNodes: new Set(),
     initialPassDone: false,
 
-    update(setting) {
+    update(setting, options = {}) {
         const enabled = !!setting?.isActive;
         const strength = typeof setting?.value === 'number' ? setting.value : Number(setting?.value);
         const normalizedStrength = Number.isFinite(strength) ? Math.max(0, Math.min(1, strength)) : 0;
+        const hoverRevealEnabled = options.hoverRevealEnabled !== undefined ? !!options.hoverRevealEnabled : true;
 
         if (!enabled || normalizedStrength <= 0) {
             this.disable();
@@ -692,7 +788,7 @@ const TextShuffleManager = {
         this.strength = normalizedStrength;
         this.maybeShieldInitialPaint();
         this.applyAll();
-        this.enableHoverPreview();
+        this.setHoverPreviewEnabled(hoverRevealEnabled);
         this.ensureObserver();
         this.initialPassDone = true;
     },
@@ -701,11 +797,21 @@ const TextShuffleManager = {
         if (!this.enabled && this.touchedNodes.size === 0 && this.touchedElements.size === 0) return;
         this.enabled = false;
         this.strength = 0;
+        this.hoverPreviewEnabled = false;
         this.pendingSubtrees.clear();
         this.pendingTextNodes.clear();
         this.teardownObserver();
         this.removeInitialPaintShield();
+        this.disableHoverPreview();
         this.restoreAll();
+    },
+
+    setHoverPreviewEnabled(enabled) {
+        const nextEnabled = !!enabled;
+        if (this.hoverPreviewEnabled === nextEnabled) return;
+        this.hoverPreviewEnabled = nextEnabled;
+        if (nextEnabled && this.enabled) this.enableHoverPreview();
+        else this.disableHoverPreview();
     },
 
     enableHoverPreview() {
@@ -2123,7 +2229,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     else InteractionManager.removeScroll();
 
       TextManager.update(filters);
-      TextShuffleManager.update(filters.textShuffle);
+      TextShuffleManager.update(filters.textShuffle, { hoverRevealEnabled });
       sendResponse?.({ ok: true });
       return false;
   });
@@ -2143,9 +2249,9 @@ chrome.storage.local.get({
            desaturation: { isActive: false, value: '50%' },
             hoverReveal: { isActive: true, value: '' },
             letterSpacing: { isActive: false, value: '0.1em' },
+            textOpacity: { isActive: false, value: '1' },
             textBlur: { isActive: false, value: '0.3px' },
-           lineHeight: { isActive: false, value: '1.45' },
-           textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
+            textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
            textShuffle: { isActive: false, value: 0.15 },
            inputDelay: { isActive: false, value: 120 },
       } 
@@ -2163,7 +2269,7 @@ chrome.storage.local.get({
           if (hoverRevealEnabled) setRootAttribute('data-friction-hover-reveal', '1');
           else removeRootAttribute('data-friction-hover-reveal');
           TextManager.update(filters);
-          TextShuffleManager.update(filters.textShuffle);
+          TextShuffleManager.update(filters.textShuffle, { hoverRevealEnabled });
           if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
           if (filters.inputDelay?.isActive) InputDelayManager.apply(filters.inputDelay.value);
           if (filters.clickDelay?.isActive) InteractionManager.applyClickDelay(filters.clickDelay.value);
