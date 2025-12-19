@@ -24,10 +24,13 @@ const DEFAULT_NUDGE_AUTO_CONFIG = {
   thresholdMs: 30 * 60 * 1000,
 };
 
+const ADVANCED_TIER = 'advanced';
+const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
+
 const SETTING_METADATA_V2 = {
-  blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
-  desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
-  letterSpacing: { label: '글자 간격', control: 'range', type: 'number', unit: 'em', unitSuffix: 'em', storage: 'cssUnit', category: 'text', order: 10, placeholder: '0.1', min: '0', max: '0.5', step: '0.02' },
+  blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', tier: 'basic', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
+  desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
+  letterSpacing: { label: '글자 간격', control: 'range', type: 'number', unit: 'em', unitSuffix: 'em', storage: 'cssUnit', category: 'text', tier: 'basic', order: 10, placeholder: '0.1', min: '0', max: '0.5', step: '0.02' },
   textOpacity: {
     label: '투명도',
     control: 'range',
@@ -36,7 +39,8 @@ const SETTING_METADATA_V2 = {
     unitSuffix: '',
     storage: 'numberString',
     category: 'text',
-    order: 30,
+    tier: 'advanced',
+    order: 50,
     placeholder: '0',
     min: '0',
     max: '100',
@@ -57,13 +61,13 @@ const SETTING_METADATA_V2 = {
       return opacity.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
     },
   },
-  textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', order: 40, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
-  textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', order: 50, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
-  textShuffle: { label: '텍스트 셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', order: 60, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
-  delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', order: 10, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
-  clickDelay: { label: '클릭 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 20, placeholder: '1000', min: '0', max: '3000', step: '50' },
-  scrollFriction: { label: '스크롤 마찰', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 30, placeholder: '50', min: '0', max: '300', step: '10' },
-  inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 40, placeholder: '120', min: '0', max: '500', step: '10' },
+  textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', tier: 'basic', order: 20, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
+  textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', tier: 'advanced', order: 30, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
+  textShuffle: { label: '텍스트 셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', tier: 'advanced', order: 40, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
+  delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', tier: 'advanced', order: 40, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
+  clickDelay: { label: '클릭 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 10, placeholder: '1000', min: '0', max: '3000', step: '50' },
+  scrollFriction: { label: '스크롤 마찰', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '300', step: '10' },
+  inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'advanced', order: 30, placeholder: '120', min: '0', max: '500', step: '10' },
 };
 
 function pickRandom(arr) {
@@ -225,6 +229,22 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     });
   }
 
+  function readAdvancedOpenState(tabKey) {
+    try {
+      const raw = localStorage.getItem(`${ADVANCED_TOGGLE_STORAGE_PREFIX}${tabKey}`);
+      if (raw === null) return null;
+      return raw === '1';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeAdvancedOpenState(tabKey, isOpen) {
+    try {
+      localStorage.setItem(`${ADVANCED_TOGGLE_STORAGE_PREFIX}${tabKey}`, isOpen ? '1' : '0');
+    } catch (_) {}
+  }
+
   function normalizeNudgeAutoConfig(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
     const enabled = typeof src.enabled === 'boolean' ? src.enabled : DEFAULT_NUDGE_AUTO_CONFIG.enabled;
@@ -368,7 +388,8 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   function collectSettingsFromGridV2() {
     const next = { ...(getSettings() || {}) };
 
-    document.querySelectorAll('.setting-card').forEach((card) => {
+    const cards = UI.settingsGrid ? UI.settingsGrid.querySelectorAll('.setting-card') : [];
+    cards.forEach((card) => {
       const toggle = card.querySelector('.toggle-active');
       const key = toggle?.dataset?.key;
       if (!key || !SETTING_METADATA_V2[key]) return;
@@ -386,6 +407,13 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     setSettings(next);
   }
 
+  async function persistCurrentSettings() {
+    const merged = mergeFilterSettings(getSettings());
+    await storageSet({ filterSettings: merged });
+    setSettings(merged);
+    chrome.runtime.sendMessage({ action: 'SETTINGS_UPDATED' });
+  }
+
   function syncSettingsSubtabUI() {
     if (!UI.settingsSubtabButtons) return;
     UI.settingsSubtabButtons.forEach((btn) => {
@@ -400,7 +428,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     if (UI.nudgeDebugPanel) UI.nudgeDebugPanel.classList.toggle('is-hidden', !isGame);
     if (UI.settingsPreview) UI.settingsPreview.classList.toggle('is-hidden', isGame);
     if (UI.settingsGrid) UI.settingsGrid.classList.toggle('is-hidden', isGame);
-    if (UI.settingsSaveCard) UI.settingsSaveCard.classList.toggle('is-hidden', isGame);
   }
 
   function setActiveSettingsSubtabV2(next) {
@@ -578,6 +605,78 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     if (UI.previewAfter) UI.previewAfter.innerHTML = '';
   }
 
+  function createSettingCard(key, meta, setting) {
+    const inputValue = valueForInputV2(meta, setting.value);
+    const inputId = `setting-${key}`;
+    const control = meta.control === 'text' ? 'text' : 'range';
+    const isActive = !!setting.isActive;
+
+    const card = document.createElement('div');
+    card.className = 'setting-card';
+    card.dataset.key = key;
+    card.innerHTML = `
+      <div class="setting-header">
+        <label for="${inputId}">${meta.label}</label>
+        <label class="switch">
+          <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-control">
+        <input
+          id="${inputId}"
+          class="input-value ${control === 'range' ? 'input-range' : ''}"
+          data-key="${key}"
+          type="${control === 'range' ? 'range' : meta.type === 'number' ? 'number' : 'text'}"
+          value="${String(inputValue).replace(/\"/g, '&quot;')}"
+          placeholder="${meta.placeholder || ''}"
+          ${
+            control === 'range'
+              ? `${meta.min !== undefined ? `min="${meta.min}"` : ''} ${meta.max !== undefined ? `max="${meta.max}"` : ''} ${meta.step !== undefined ? `step="${meta.step}"` : ''}`
+              : `${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}`
+          }
+          ${isActive ? '' : 'disabled'}
+          style="${control === 'range' ? '' : 'flex-grow: 1;'}"
+        >
+        ${
+          control === 'range'
+            ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
+            : `<span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>`
+        }
+      </div>
+    `;
+
+    syncSettingCardUIV2(card);
+    return card;
+  }
+
+  function splitEntriesByTier(entries) {
+    const basic = [];
+    const advanced = [];
+    entries.forEach((entry) => {
+      const meta = entry[1];
+      if (meta?.tier === ADVANCED_TIER) advanced.push(entry);
+      else basic.push(entry);
+    });
+    return { basic, advanced };
+  }
+
+  function countActiveEntries(entries, settings) {
+    if (!entries.length) return 0;
+    return entries.reduce((count, [key]) => count + (settings?.[key]?.isActive ? 1 : 0), 0);
+  }
+
+  function updateAdvancedBadge() {
+    if (!UI.settingsGrid) return;
+    const badge = UI.settingsGrid.querySelector('[data-settings-advanced-badge="true"]');
+    if (!badge) return;
+    const entries = Object.entries(SETTING_METADATA_V2)
+      .filter(([, meta]) => meta.category === currentSettingsSubtab && meta?.tier === ADVANCED_TIER);
+    const count = countActiveEntries(entries, getSettings());
+    badge.textContent = count > 0 ? `활성 ${count}개` : '';
+    badge.classList.toggle('is-hidden', count === 0);
+  }
+
   async function updateSettingsPreviewV2() {
     if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
     const settings = getSettings();
@@ -625,7 +724,10 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       const filterParts = [];
       if (settings?.blur?.isActive) filterParts.push(`blur(${settings.blur.value})`);
       if (settings?.desaturation?.isActive) filterParts.push(`saturate(calc(100% - ${settings.desaturation.value}))`);
-      if (filterParts.length > 0) after.style.filter = filterParts.join(' ');
+      if (filterParts.length > 0) {
+        ia.style.filter = filterParts.join(' ');
+        ia.style.willChange = 'filter';
+      }
 
       UI.previewBefore.appendChild(before);
       UI.previewAfter.appendChild(after);
@@ -694,52 +796,53 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
 
     const settings = getSettings() || {};
+    const { basic, advanced } = splitEntriesByTier(entries);
 
-    entries.forEach(([key, meta]) => {
+    const basicGroup = document.createElement('div');
+    basicGroup.className = 'settings-group settings-group-basic';
+    basicGroup.innerHTML = `
+      <div class="settings-group-header">
+        <span class="settings-group-title">기본</span>
+      </div>
+      <div class="settings-group-grid"></div>
+    `;
+    const basicGrid = basicGroup.querySelector('.settings-group-grid');
+    basic.forEach(([key, meta]) => {
       const setting = settings[key] || CONFIG_DEFAULT_FILTER_SETTINGS[key] || { isActive: false, value: '' };
-      const inputValue = valueForInputV2(meta, setting.value);
-      const inputId = `setting-${key}`;
-      const control = meta.control === 'text' ? 'text' : 'range';
-      const isActive = !!setting.isActive;
+      basicGrid.appendChild(createSettingCard(key, meta, setting));
+    });
+    UI.settingsGrid.appendChild(basicGroup);
 
-      const card = document.createElement('div');
-      card.className = 'setting-card';
-      card.dataset.key = key;
-      card.innerHTML = `
-        <div class="setting-header">
-          <label for="${inputId}">${meta.label}</label>
-          <label class="switch">
-            <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="setting-control">
-          <input
-            id="${inputId}"
-            class="input-value ${control === 'range' ? 'input-range' : ''}"
-            data-key="${key}"
-            type="${control === 'range' ? 'range' : meta.type === 'number' ? 'number' : 'text'}"
-            value="${String(inputValue).replace(/\"/g, '&quot;')}"
-            placeholder="${meta.placeholder || ''}"
-            ${
-              control === 'range'
-                ? `${meta.min !== undefined ? `min="${meta.min}"` : ''} ${meta.max !== undefined ? `max="${meta.max}"` : ''} ${meta.step !== undefined ? `step="${meta.step}"` : ''}`
-                : `${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}`
-            }
-            ${isActive ? '' : 'disabled'}
-            style="${control === 'range' ? '' : 'flex-grow: 1;'}"
-          >
-          ${
-            control === 'range'
-              ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
-              : `<span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>`
-          }
-        </div>
+    if (advanced.length > 0) {
+      const activeCount = countActiveEntries(advanced, settings);
+      const storedOpen = readAdvancedOpenState(currentSettingsSubtab);
+      const shouldOpen = storedOpen !== null ? storedOpen : activeCount > 0;
+
+      const advancedGroup = document.createElement('details');
+      advancedGroup.className = 'settings-group settings-group-advanced';
+      advancedGroup.open = shouldOpen;
+      advancedGroup.innerHTML = `
+        <summary class="settings-group-summary">
+          <span class="settings-group-title">고급 옵션</span>
+          <span class="settings-group-badge ${activeCount > 0 ? '' : 'is-hidden'}" data-settings-advanced-badge="true">
+            ${activeCount > 0 ? `활성 ${activeCount}개` : ''}
+          </span>
+        </summary>
+        <div class="settings-group-grid"></div>
       `;
 
-      UI.settingsGrid.appendChild(card);
-      syncSettingCardUIV2(card);
-    });
+      const advancedGrid = advancedGroup.querySelector('.settings-group-grid');
+      advanced.forEach(([key, meta]) => {
+        const setting = settings[key] || CONFIG_DEFAULT_FILTER_SETTINGS[key] || { isActive: false, value: '' };
+        advancedGrid.appendChild(createSettingCard(key, meta, setting));
+      });
+
+      advancedGroup.addEventListener('toggle', () => {
+        writeAdvancedOpenState(currentSettingsSubtab, advancedGroup.open);
+      });
+
+      UI.settingsGrid.appendChild(advancedGroup);
+    }
   }
 
   function setup() {
@@ -759,6 +862,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
         setSettings(next);
         updateSettingsPreviewV2();
+        persistCurrentSettings().catch(() => {});
       });
     }
 
@@ -780,6 +884,16 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           syncSettingCardUIV2(card);
           collectSettingsFromGridV2();
           updateSettingsPreviewV2();
+          updateAdvancedBadge();
+          persistCurrentSettings().catch(() => {});
+          return;
+        }
+
+        if (target.classList.contains('input-value')) {
+          syncSettingCardUIV2(card);
+          collectSettingsFromGridV2();
+          updateSettingsPreviewV2();
+          persistCurrentSettings().catch(() => {});
         }
       });
 
@@ -794,24 +908,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           collectSettingsFromGridV2();
           updateSettingsPreviewV2();
         }
-      });
-    }
-
-    if (UI.saveSettingsBtn) {
-      UI.saveSettingsBtn.addEventListener('click', () => {
-        collectSettingsFromGridV2();
-        const merged = mergeFilterSettings(getSettings());
-
-        chrome.storage.local.set({ filterSettings: merged }, () => {
-          if (UI.saveStatus) {
-            UI.saveStatus.textContent = '설정 저장 완료!';
-            setTimeout(() => {
-              if (UI.saveStatus) UI.saveStatus.textContent = '';
-            }, 2000);
-          }
-          chrome.runtime.sendMessage({ action: 'SETTINGS_UPDATED' });
-          setSettings(merged);
-        });
       });
     }
 
@@ -881,6 +977,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
   function beforeLeave() {
     collectSettingsFromGridV2();
+    persistCurrentSettings().catch(() => {});
     fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
   }
 

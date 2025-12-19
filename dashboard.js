@@ -105,14 +105,11 @@ function initDOMReferences() {
 
   UI.settingsGrid = document.querySelector('.settings-grid');
   UI.settingsSubtabButtons = document.querySelectorAll('.settings-subtab-btn');
-  UI.saveSettingsBtn = document.getElementById('saveSettingsBtn');
-  UI.saveStatus = document.getElementById('saveStatus');
   UI.settingsPreview = document.getElementById('settingsPreview');
   UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
   UI.previewBefore = document.getElementById('previewBefore');
   UI.previewAfter = document.getElementById('previewAfter');
   UI.hoverRevealToggle = document.getElementById('hoverRevealToggle');
-  UI.settingsSaveCard = document.getElementById('settingsSaveCard');
 
   UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
   UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');
@@ -289,7 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const setStatus = (msg) => {
         if (UI.nudgeDebugStatus) UI.nudgeDebugStatus.textContent = msg;
-        if (UI.saveStatus) UI.saveStatus.textContent = msg;
       };
 
       setStatus('초기화 중...');
