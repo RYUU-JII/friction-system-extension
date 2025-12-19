@@ -24,6 +24,15 @@ const STYLES = {
     INPUT_DELAY: { ID: 'friction-input-delay-style', ATTR: 'data-input-delay-applied' },
 };
 
+let anxietyBuffer = {
+    clicks: 0,
+    scrollSpikes: 0,
+    dragCount: 0,
+    backspaces: 0,
+    backHistory: 0,
+    videoSkips: 0
+};
+
 const ATTRS = {
     CLICK: 'data-click-delay-active',
     SCROLL: 'data-scroll-friction-active',
@@ -1749,6 +1758,58 @@ const InteractionManager = {
     }
 };
 
+// ===========================================================
+// 3.4 Anxiety Sensor
+// ===========================================================
+
+const AnxietySensor = {
+    // 1. 데이터 전송 (Background로 전달)
+    send: function(metric) {
+        chrome.runtime.sendMessage({ type: "TRACK_ANXIETY", metric: metric });
+    },
+
+    // 2. 이벤트 리스너 등록
+    init: function() {
+        // 클릭 감지
+        document.addEventListener('mousedown', () => this.send('clicks'), true);
+
+        // 백스페이스 감지 (생각의 파편화)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') this.send('backspaces');
+        }, true);
+
+        // 텍스트 드래그 감지 (mouseup 시 선택 영역 확인)
+        document.addEventListener('mouseup', () => {
+            const selection = window.getSelection().toString();
+            if (selection.length > 0) this.send('dragCount');
+        }, true);
+
+        // 뒤로가기 감지
+        window.addEventListener('popstate', () => this.send('backHistory'));
+
+        // 고속 스크롤 감지
+        let isScrollingFast = false;
+        window.addEventListener('scroll', () => {
+            const now = Date.now();
+            const st = window.pageYOffset || document.documentElement.scrollTop;
+            const velocity = Math.abs(st - lastScrollTop) / (now - lastTime);
+            
+            if (velocity > 5 && !isScrollingFast) { 
+                isScrollingFast = true;
+                this.send('scrollSpikes');
+                // 1초 뒤에 다시 감지 가능하도록 리셋 (연타 방지)
+                setTimeout(() => { isScrollingFast = false; }, 1000);
+            }
+            lastScrollTop = st;
+            lastTime = now;
+        }, { passive: true });
+
+        // 비디오 스킵 감지 (유튜브 등)
+        document.addEventListener('seeking', (e) => {
+            if (e.target.tagName === 'VIDEO') this.send('videoSkips');
+        }, true);
+    }
+};
 
 // ===========================================================
 // 3.5 Nudge Game (Blocked-site focus reminder)
@@ -2277,3 +2338,5 @@ chrome.storage.local.get({
           VisualManager.update(filters);
       }
   });
+
+AnxietySensor.init();
