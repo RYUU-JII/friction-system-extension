@@ -1717,24 +1717,35 @@ const InteractionManager = {
     },
 
     handleWheel(e) {
+        // 1. 기본 브라우저 스크롤 및 전파 차단 (Friction 핵심)
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
 
+        // 2. 스크롤 값 누적
         state.scrollAccumulator.x += e.deltaX;
         state.scrollAccumulator.y += e.deltaY;
 
+        // ⚡ [통합된 불안 감지 로직]
+        // 휠을 한 번 굴릴 때의 강도(deltaY)가 크거나, 
+        // 누적된 값이 짧은 시간 내에 매우 크다면 'scrollSpikes'로 간주
+        const wheelIntensity = Math.abs(e.deltaY);
+        if (wheelIntensity > 200) { // 강한 휠 조작 감지 (수치는 조정 가능)
+            safeSendMessage({ type: "TRACK_ANXIETY", metric: "scrollSpikes" });
+        }
+
+        // 3. 지연 타이머 설정 (Friction 적용)
         if (state.scrollTimer) clearTimeout(state.scrollTimer);
 
         state.scrollTimer = setTimeout(() => {
+            // 실제 화면 이동 실행
             window.scrollBy({
                 left: state.scrollAccumulator.x,
                 top: state.scrollAccumulator.y,
-                behavior: 'instant'
+                behavior: 'instant' 
             });
             
-            document.documentElement.scrollTop += state.scrollAccumulator.y;
-
+            // 누적값 초기화
             state.scrollAccumulator = { x: 0, y: 0 };
             state.scrollTimer = null;
         }, state.scrollDelayTime);
@@ -1761,11 +1772,28 @@ const InteractionManager = {
 // ===========================================================
 // 3.4 Anxiety Sensor
 // ===========================================================
+function safeSendMessage(message) {
+    // 컨텍스트가 깨졌는지(Invalidated) 먼저 확인
+    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
+        return; // 에러를 내지 않고 조용히 종료
+    }
+
+    try {
+        chrome.runtime.sendMessage(message, (response) => {
+            // 전송 후 발생하는 런타임 에러(컨텍스트 무효화 등)를 잡아서 무시
+            if (chrome.runtime.lastError) {
+                // console.warn("Context invalidated, ignoring message.");
+            }
+        });
+    } catch (e) {
+        // 완전히 연결이 끊긴 경우 예외 처리
+    }
+}
 
 const AnxietySensor = {
     // 1. 데이터 전송 (Background로 전달)
     send: function(metric) {
-        chrome.runtime.sendMessage({ type: "TRACK_ANXIETY", metric: metric });
+        safeSendMessage({ type: "TRACK_ANXIETY", metric: metric });
     },
 
     // 2. 이벤트 리스너 등록
@@ -1786,23 +1814,6 @@ const AnxietySensor = {
 
         // 뒤로가기 감지
         window.addEventListener('popstate', () => this.send('backHistory'));
-
-        // 고속 스크롤 감지
-        let isScrollingFast = false;
-        window.addEventListener('scroll', () => {
-            const now = Date.now();
-            const st = window.pageYOffset || document.documentElement.scrollTop;
-            const velocity = Math.abs(st - lastScrollTop) / (now - lastTime);
-            
-            if (velocity > 5 && !isScrollingFast) { 
-                isScrollingFast = true;
-                this.send('scrollSpikes');
-                // 1초 뒤에 다시 감지 가능하도록 리셋 (연타 방지)
-                setTimeout(() => { isScrollingFast = false; }, 1000);
-            }
-            lastScrollTop = st;
-            lastTime = now;
-        }, { passive: true });
 
         // 비디오 스킵 감지 (유튜브 등)
         document.addEventListener('seeking', (e) => {
