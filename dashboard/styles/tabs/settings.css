@@ -119,6 +119,7 @@
 .settings-preview.is-hover-reveal-enabled #previewAfter .preview-text:hover {
     filter: none !important;
     text-shadow: none !important;
+    opacity: 1 !important;
 }
 body.dark .preview-text {
     background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.00));

@@ -2,7 +2,7 @@ import { CONFIG_DEFAULT_FILTER_SETTINGS } from '../../config.js';
 import { loadTextContent } from '../../utils/fileLoader.js';
 
 const SETTINGS_PREVIEW_TEXT_PATH = 'samples/texts/text_sample_1.txt';
-const SETTINGS_PREVIEW_TEXT_FALLBACK = '샘플 텍스트를 불러오지 못했습니다.';
+const SETTINGS_PREVIEW_TEXT_FALLBACK = '샘플 텍스트를 불러오지 못했습니다';
 
 const SETTINGS_PREVIEW_MEDIA_VARIANTS = [
   {
@@ -27,70 +27,9 @@ const DEFAULT_NUDGE_AUTO_CONFIG = {
 const SETTING_METADATA_V2 = {
   blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
   desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
-  mediaBrightness: {
-    label: '밝기',
-    control: 'range',
-    type: 'number',
-    unit: '%',
-    unitSuffix: '%',
-    storage: 'cssUnit',
-    category: 'media',
-    order: 30,
-    placeholder: '0',
-    min: '0',
-    max: '100',
-    step: '1',
-    fromStorage: (storedValue) => {
-      const s = String(storedValue ?? '100%');
-      const match = s.match(/-?\d+(\.\d+)?/);
-      const brightness = match ? parseFloat(match[0]) : 100;
-      const strength = (100 - brightness) / 0.5;
-      return String(Math.max(0, Math.min(100, Math.round(strength))));
-    },
-    toStorage: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const brightness = 100 - strength * 0.5;
-      return `${Math.round(brightness)}%`;
-    },
-    displayValue: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const brightness = 100 - strength * 0.5;
-      return `${Math.round(brightness)}%`;
-    },
-  },
-  mediaOpacity: {
-    label: '투명도',
-    control: 'range',
-    type: 'number',
-    unit: '',
-    unitSuffix: '',
-    storage: 'numberString',
-    category: 'media',
-    order: 40,
-    placeholder: '0',
-    min: '0',
-    max: '100',
-    step: '1',
-    fromStorage: (storedValue) => {
-      const opacity = Math.max(0.15, Math.min(1, parseFloat(String(storedValue ?? '1')) || 1));
-      const strength = ((1 - opacity) / (1 - 0.15)) * 100;
-      return String(Math.max(0, Math.min(100, Math.round(strength))));
-    },
-    toStorage: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const opacity = 1 - (strength / 100) * (1 - 0.15);
-      return opacity.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-    },
-    displayValue: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const opacity = 1 - (strength / 100) * (1 - 0.15);
-      return opacity.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-    },
-  },
   letterSpacing: { label: '글자 간격', control: 'range', type: 'number', unit: 'em', unitSuffix: 'em', storage: 'cssUnit', category: 'text', order: 10, placeholder: '0.1', min: '0', max: '0.5', step: '0.02' },
-  lineHeight: { label: '줄 간격', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', order: 20, placeholder: '1.5', min: '1', max: '2.5', step: '0.05' },
   textOpacity: {
-    label: '텍스트 투명도',
+    label: '투명도',
     control: 'range',
     type: 'number',
     unit: '',
@@ -120,15 +59,12 @@ const SETTING_METADATA_V2 = {
   },
   textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', order: 40, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
   textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', order: 50, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
-  textShuffle: { label: '셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', order: 60, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
+  textShuffle: { label: '텍스트 셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', order: 60, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
   delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', order: 10, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
   clickDelay: { label: '클릭 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 20, placeholder: '1000', min: '0', max: '3000', step: '50' },
   scrollFriction: { label: '스크롤 마찰', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 30, placeholder: '50', min: '0', max: '300', step: '10' },
   inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', order: 40, placeholder: '120', min: '0', max: '500', step: '10' },
 };
-
-// Removed for stability/perf: opacity/brightness visual effects (kept only for backward compatibility with stored settings).
-const REMOVED_SETTING_KEYS = new Set(['mediaBrightness', 'mediaOpacity', 'textOpacity']);
 
 function pickRandom(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return null;
@@ -218,7 +154,6 @@ function seededShuffleWords(text, seedStr, strength = 1) {
   const s = Math.max(0, Math.min(1, strength || 0));
   if (s <= 0) return original;
 
-  // 공백(엔터 포함)을 보존해야 문단이 합쳐지지 않습니다.
   const parts = original.split(/(\s+)/);
   const wordSlots = [];
   const words = [];
@@ -243,8 +178,6 @@ function seededShuffleWords(text, seedStr, strength = 1) {
   };
   const nextInt = (max) => (max > 0 ? Math.floor(nextRand() * max) : 0);
 
-  // NOTE: "셔플 강도"는 '부분 섞기' 느낌이지만,
-  // 원문 단어의 누락/중복이 생기면 안 되므로 '스왑 기반'으로만 섞습니다(항상 순열 유지).
   const outWords = words.slice();
   const n = outWords.length;
   const kMax = Math.min(25, Math.floor(n / 2));
@@ -515,7 +448,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       },
       message: {
         title: '잠깐!',
-        body: '오늘 차단 사이트에서 너무 오래 있었어. 대시보드로 돌아가서 리캡을 확인해볼래?',
+        body: '늘 차단 중이에요. 무례했거나 불편함으로 돌아가세요.',
       },
     };
   }
@@ -563,7 +496,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   async function sendNudgeDebugMessage(message) {
     const tabId = await resolveTargetTabId();
     if (!tabId) {
-      setNudgeDebugStatus('대상 탭을 찾지 못했습니다.');
+      setNudgeDebugStatus('탭을 찾지 못했어요.');
       return;
     }
 
@@ -596,7 +529,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     }
 
     if (String(err1).includes('Receiving end does not exist')) {
-      setNudgeDebugStatus('콘텐츠 스크립트가 없어 주입 후 재시도합니다...');
+      setNudgeDebugStatus('콘텐츠스크립트가 아직 주입 중입니다...');
       const injectErr = await tryInject();
       if (injectErr) {
         setNudgeDebugStatus(`주입 실패: ${injectErr}`);
@@ -605,11 +538,11 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
       const err2 = await trySend();
       if (err2) {
-        setNudgeDebugStatus(`재전송 실패: ${err2}`);
+        setNudgeDebugStatus(`전송 실패: ${err2}`);
         return;
       }
 
-      setNudgeDebugStatus(`전송 완료(주입 후) (tabId: ${tabId})`);
+      setNudgeDebugStatus(`전송 완료 (주입 후) (tabId: ${tabId})`);
       return;
     }
 
@@ -657,7 +590,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     if (currentSettingsSubtab === 'media') {
       if (UI.settingsPreviewDescription) {
         UI.settingsPreviewDescription.textContent =
-          '왼쪽은 원본, 오른쪽은 현재 활성화된 미디어 필터가 적용된 결과입니다.';
+          '왼쪽은 원본, 오른쪽은 현재 설정된 미디어 필터가 적용된 결과입니다.';
       }
 
       const variant = ensurePreviewMediaVariant();
@@ -701,7 +634,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
     if (currentSettingsSubtab === 'text') {
       if (UI.settingsPreviewDescription) {
-        UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 활성화된 텍스트 필터가 적용된 결과입니다.';
+        UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 설정된 텍스트 필터가 적용된 결과입니다.';
       }
 
       const originalText = await ensurePreviewText();
@@ -714,27 +647,40 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       const after = document.createElement('div');
       after.className = 'preview-text';
 
+      const hoverRevealEnabled = !!settings?.hoverReveal?.isActive;
       const strength = getTextShuffleProbability(settings);
       const shuffled = strength > 0 ? seededShuffleWords(originalText, `friction-preview-${strength}`, strength) : originalText;
       after.textContent = shuffled;
 
       if (settings?.letterSpacing?.isActive) after.style.letterSpacing = String(settings.letterSpacing.value);
-      if (settings?.lineHeight?.isActive) after.style.lineHeight = String(settings.lineHeight.value);
+      if (settings?.textOpacity?.isActive) {
+        const opacity = parseFloat(String(settings.textOpacity.value));
+        if (Number.isFinite(opacity)) after.style.opacity = String(opacity);
+      }
       if (settings?.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
       if (settings?.textBlur?.isActive) after.style.filter = `blur(${settings.textBlur.value})`;
+
+      if (hoverRevealEnabled && strength > 0) {
+        after.addEventListener('mouseenter', () => {
+          after.textContent = originalText;
+        });
+        after.addEventListener('mouseleave', () => {
+          after.textContent = shuffled;
+        });
+      }
 
       UI.previewBefore.appendChild(before);
       UI.previewAfter.appendChild(after);
       return;
     }
 
-    if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '지연 필터는 예시 미리보기가 없습니다.';
+    if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '지금은 미리보기가 없습니다.';
     const placeholderBefore = document.createElement('div');
     placeholderBefore.className = 'preview-placeholder';
-    placeholderBefore.textContent = '예시 없음';
+    placeholderBefore.textContent = '미리 보기 없음';
     const placeholderAfter = document.createElement('div');
     placeholderAfter.className = 'preview-placeholder';
-    placeholderAfter.textContent = '예시 없음';
+    placeholderAfter.textContent = '미리 보기 없음';
     UI.previewBefore.appendChild(placeholderBefore);
     UI.previewAfter.appendChild(placeholderAfter);
   }
@@ -744,7 +690,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     UI.settingsGrid.innerHTML = '';
 
     const entries = Object.entries(SETTING_METADATA_V2)
-      .filter(([key, meta]) => meta.category === currentSettingsSubtab && !REMOVED_SETTING_KEYS.has(key))
+      .filter(([, meta]) => meta.category === currentSettingsSubtab)
       .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
 
     const settings = getSettings() || {};
@@ -924,7 +870,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
     if (currentSettingsSubtab === 'game') {
       syncNudgeDebugOutputs();
-      // 대시보드가 열릴 때마다 최신 설정을 반영
+      // 미리보기 최신 설정 반영
       await loadNudgeAutoConfigAndSyncUI();
       return;
     }
