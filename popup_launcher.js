@@ -20,7 +20,12 @@ function storageSet(value) {
 }
 
 function sendMessage(message) {
-  return new Promise((resolve) => chrome.runtime.sendMessage(message, resolve));
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) return resolve(null);
+      resolve(response);
+    });
+  });
 }
 
 function setMsg(el, text, tone = "muted") {
@@ -116,7 +121,7 @@ async function init() {
 
       next.push(hostname);
       await storageSet({ blockedUrls: next });
-      await sendMessage({ action: "SETTINGS_UPDATED" });
+      await sendMessage({ action: "REFRESH_SETTINGS" });
 
       setMsg(msgEl, `${hostname} 차단 완료`, "success");
       setBlockedButtonState(quickBlockBtn, true);
