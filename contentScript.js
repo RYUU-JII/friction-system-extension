@@ -75,6 +75,8 @@ const SELECTORS = {
 const SOCIAL_METRIC_ATTRS = {
     ENGAGEMENT: 'data-friction-social-engagement',
     EXPOSURE: 'data-friction-social-exposure',
+    ORIGINAL_TEXT: 'data-friction-social-original-text',
+    ORIGINAL_DISPLAY: 'data-friction-social-original-display',
 };
 
 const SOCIAL_METRIC_SELECTORS = {
@@ -118,19 +120,40 @@ const SOCIAL_METRIC_SELECTORS = {
             'article span[role="button"][tabindex="0"]',
             'section[role="dialog"] span[role="button"][tabindex="0"]',
             'div[role="dialog"] span[role="button"][tabindex="0"]',
+            'span[role="button"][tabindex="0"]',
+            'article [role="button"] span',
+            'section[role="dialog"] [role="button"] span',
+            'div[role="dialog"] [role="button"] span',
+            'article button span',
+            'section[role="dialog"] button span',
+            'div[role="dialog"] button span',
+            'div[role="button"] span.html-span',
+            '[role="button"] span.html-span',
+            'article span.html-span',
+            'section[role="dialog"] span.html-span',
+            'div[role="dialog"] span.html-span',
             'header a[href*="/followers/"] span',
             'header a[href*="/following/"] span',
             'header span.html-span',
-            'section[role="dialog"] span.html-span',
-            'div[role="dialog"] span.html-span',
         ],
         exposure: [
             'time[datetime]',
             'article time[datetime]',
             'section[role="dialog"] time[datetime]',
             'div[role="dialog"] time[datetime]',
+            'a[href*="/reel/"] span.html-span',
+            'a[href*="/reels/"] span.html-span',
         ],
     },
+};
+
+const INSTAGRAM_SOCIAL_LABELS = {
+    LIKE: '\uC88B\uC544\uC694',
+    COMMENT: '\uB313\uAE00',
+    FOLLOWER: '\uD314\uB85C\uC6CC',
+    FOLLOWING: '\uD314\uB85C\uC789',
+    VIEWS: '\uC870\uD68C\uC218',
+    UPLOAD: '\uC5C5\uB85C\uB4DC',
 };
 
 // ===========================================================
@@ -704,11 +727,286 @@ const SocialMetricsManager = {
     _scanTimer: null,
     _activeEngagement: false,
     _activeExposure: false,
+    _getHost() {
+        return String(location.hostname || '').replace(/^www\./, '');
+    },
+    _isInstagramHost() {
+        const host = this._getHost();
+        return host === 'instagram.com' || host.endsWith('.instagram.com');
+    },
+    _isInstagramPostCount(el) {
+        if (!(el instanceof Element)) return false;
+        let current = el;
+        for (let i = 0; current && i < 4; i += 1) {
+            const text = (current.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (text.includes('\uAC8C\uC2DC\uBB3C') || text.includes('posts')) {
+                return true;
+            }
+            current = current.parentElement;
+        }
+        return false;
+    },
+    _isInstagramGridOverlayMetric(el) {
+        if (!(el instanceof Element)) return false;
+        const link = el.closest('a[href*="/p/"]');
+        if (!link) return false;
+        if (!link.querySelector || !link.querySelector('img, video')) return false;
+        const hasOverlayIcon = link.querySelector('svg[aria-label*="\uC88B\uC544\uC694"], svg[aria-label*="\uB313\uAE00"], svg[aria-label*="like"], svg[aria-label*="comment"]');
+        if (!hasOverlayIcon) return false;
+        return true;
+    },
+    _getInstagramContextHints(el) {
+        const parts = [];
+        const pushAttr = (node, attr) => {
+            if (!node || !node.getAttribute) return;
+            const value = node.getAttribute(attr);
+            if (value) parts.push(value);
+        };
+
+        pushAttr(el, 'aria-label');
+        pushAttr(el, 'title');
+
+        const interactive = el && el.closest
+            ? el.closest('a,button,[role="button"],[role="link"]')
+            : null;
+        if (interactive) {
+            pushAttr(interactive, 'aria-label');
+            pushAttr(interactive, 'title');
+            const icon = interactive.querySelector && interactive.querySelector('svg[aria-label], span[aria-label]');
+            if (icon) pushAttr(icon, 'aria-label');
+        }
+
+        const parent = el && el.parentElement ? el.parentElement : null;
+        if (parent) {
+            pushAttr(parent, 'aria-label');
+            pushAttr(parent, 'title');
+        }
+
+        return parts.join(' ').toLowerCase();
+    },
+    _getInstagramButtonLabel(el) {
+        const button = el && el.closest
+            ? el.closest('button,[role="button"],a,[role="link"]')
+            : null;
+        if (!button) return '';
+
+        const isRelevantLabel = (label) => {
+            return /(\uC88B\uC544\uC694|\uB313\uAE00|comment|reply|like)/i.test(label);
+        };
+
+        const readLabel = (node) => {
+            if (!node || !node.getAttribute) return '';
+            const aria = node.getAttribute('aria-label');
+            if (aria) return String(aria).toLowerCase();
+            const title = node.getAttribute('title');
+            if (title) return String(title).toLowerCase();
+            const icon = node.querySelector
+                ? node.querySelector('svg[aria-label], span[aria-label]')
+                : null;
+            if (icon) {
+                const iconLabel = icon.getAttribute('aria-label');
+                if (iconLabel) return String(iconLabel).toLowerCase();
+            }
+            return '';
+        };
+
+        const readLabelDeep = (node) => {
+            const direct = readLabel(node);
+            if (direct) return direct;
+            if (!node || !node.querySelector) return '';
+            const nested = node.querySelector('svg[aria-label], span[aria-label], [aria-label][role="img"], [aria-label][role="button"], [aria-label][role="link"], button[aria-label], a[aria-label]');
+            if (!nested) return '';
+            return readLabel(nested);
+        };
+
+        const scanSiblingChain = (node) => {
+            const directions = ['previousElementSibling', 'nextElementSibling'];
+            let fallback = '';
+            for (const direction of directions) {
+                let sibling = node ? node[direction] : null;
+                let steps = 0;
+                while (sibling && steps < 6) {
+                    const label = readLabelDeep(sibling);
+                    if (label) {
+                        if (isRelevantLabel(label)) return label;
+                        if (!fallback) fallback = label;
+                    }
+                    sibling = sibling[direction];
+                    steps += 1;
+                }
+            }
+            return fallback;
+        };
+
+        const direct = readLabelDeep(button);
+        if (direct && isRelevantLabel(direct)) return direct;
+        let fallback = direct;
+
+        const parent = button.parentElement;
+        if (parent) {
+            const parentLabel = scanSiblingChain(button);
+            if (parentLabel && isRelevantLabel(parentLabel)) return parentLabel;
+            if (!fallback) fallback = parentLabel;
+        }
+
+        let current = parent;
+        for (let depth = 0; current && depth < 4; depth += 1) {
+            const label = scanSiblingChain(current);
+            if (label && isRelevantLabel(label)) return label;
+            if (!fallback) fallback = label;
+            current = current.parentElement;
+        }
+
+        return fallback || '';
+    },
+    _getInstagramMetricInfo(el) {
+        if (!(el instanceof Element)) return null;
+
+        if (this._isInstagramGridOverlayMetric(el)) return null;
+        if (this._isInstagramPostCount(el)) return null;
+
+        const originalAttr = SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT;
+        const rawText = (el.getAttribute(originalAttr) || el.textContent || '').trim();
+        if (!rawText) return null;
+
+        if (el.tagName === 'TIME' || el.closest('time[datetime]')) {
+            return { type: 'exposure', label: INSTAGRAM_SOCIAL_LABELS.UPLOAD };
+        }
+
+        const lowerText = rawText.toLowerCase();
+        if (/\uC88B\uC544\uC694|like/.test(lowerText)) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.LIKE };
+        }
+        if (/\uB313\uAE00|comment|reply/.test(lowerText)) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.COMMENT };
+        }
+        if (/\uC870\uD68C|view/.test(lowerText)) {
+            return { type: 'exposure', label: INSTAGRAM_SOCIAL_LABELS.VIEWS };
+        }
+
+        const link = el.closest('a[href]');
+        const href = link ? String(link.getAttribute('href') || '').toLowerCase() : '';
+        if (href.includes('/followers')) {
+            return { type: 'engagement', label: '', hide: true };
+        }
+        if (href.includes('/following')) {
+            return { type: 'engagement', label: '', hide: true };
+        }
+
+        const context = this._getInstagramContextHints(el);
+        if (context.includes('\uD314\uB85C\uC6CC') || context.includes('follower')) {
+            return { type: 'engagement', label: '', hide: true };
+        }
+        if (context.includes('\uD314\uB85C\uC789') || context.includes('following')) {
+            return { type: 'engagement', label: '', hide: true };
+        }
+        if (context.includes('\uB313\uAE00') || context.includes('comment') || context.includes('reply')) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.COMMENT };
+        }
+        if (context.includes('\uC88B\uC544\uC694') || context.includes('like') || context.includes('heart')) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.LIKE };
+        }
+        if (context.includes('\uC870\uD68C') || context.includes('view')) {
+            return { type: 'exposure', label: INSTAGRAM_SOCIAL_LABELS.VIEWS };
+        }
+        if (context.includes('\uC804') || /\bago\b/.test(context)) {
+            return { type: 'exposure', label: INSTAGRAM_SOCIAL_LABELS.UPLOAD };
+        }
+
+        const buttonLabel = this._getInstagramButtonLabel(el);
+        if (buttonLabel.includes('\uB313\uAE00') || buttonLabel.includes('comment') || buttonLabel.includes('reply')) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.COMMENT };
+        }
+        if (buttonLabel.includes('\uC88B\uC544\uC694') || buttonLabel.includes('like') || buttonLabel.includes('heart')) {
+            return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.LIKE };
+        }
+
+        if (el.closest('a[href*="/reel/"]') || el.closest('a[href*="/reels/"]')) {
+            return { type: 'exposure', label: INSTAGRAM_SOCIAL_LABELS.VIEWS };
+        }
+
+        return { type: 'engagement', label: INSTAGRAM_SOCIAL_LABELS.LIKE };
+    },
+    _applyInstagramReplacement(el, label, attr) {
+        if (!(el instanceof Element)) return;
+        if (el.children && el.children.length > 0) return;
+
+        const originalAttr = SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT;
+        if (!el.hasAttribute(originalAttr)) {
+            el.setAttribute(originalAttr, el.textContent || '');
+        }
+
+        const nextText = label || '';
+        const originalDisplayAttr = SOCIAL_METRIC_ATTRS.ORIGINAL_DISPLAY;
+        if (!label) {
+            if (!el.hasAttribute(originalDisplayAttr)) {
+                el.setAttribute(originalDisplayAttr, el.style.display || '');
+            }
+            el.style.display = 'none';
+        } else {
+            if (el.hasAttribute(originalDisplayAttr)) {
+                el.style.display = el.getAttribute(originalDisplayAttr) || '';
+                el.removeAttribute(originalDisplayAttr);
+            }
+            if ((el.textContent || '').trim() !== nextText) {
+                el.textContent = nextText;
+            }
+        }
+        el.setAttribute(attr, '1');
+
+        if (label) this._cleanupInstagramCompoundLabel(el, label);
+    },
+    _cleanupInstagramCompoundLabel(el, label) {
+        if (!(el instanceof Element)) return;
+        if (label !== INSTAGRAM_SOCIAL_LABELS.LIKE && label !== INSTAGRAM_SOCIAL_LABELS.COMMENT) return;
+
+        const matchesCompound = (text) => {
+            const normalized = String(text || '').replace(/\s+/g, '');
+            const target = String(label || '').replace(/\s+/g, '');
+            if (!normalized || !target) return false;
+            return (
+                normalized === `${target}${target}` ||
+                normalized === `${target}${target}\uAC1C` ||
+                normalized === `${target}\uAC1C${target}`
+            );
+        };
+
+        let current = el.parentElement;
+        let steps = 0;
+        while (current && steps < 3) {
+            if (current.querySelector && current.querySelector('svg')) break;
+            const text = current.textContent || '';
+            if (matchesCompound(text)) {
+                current.textContent = label;
+                break;
+            }
+            steps += 1;
+            current = current.parentElement;
+        }
+    },
+    _restoreInstagramText(el) {
+        if (!(el instanceof Element)) return;
+        const originalAttr = SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT;
+        if (!el.hasAttribute(originalAttr)) return;
+        if (el.hasAttribute(SOCIAL_METRIC_ATTRS.ENGAGEMENT) || el.hasAttribute(SOCIAL_METRIC_ATTRS.EXPOSURE)) {
+            return;
+        }
+        const originalDisplayAttr = SOCIAL_METRIC_ATTRS.ORIGINAL_DISPLAY;
+        if (el.hasAttribute(originalDisplayAttr)) {
+            el.style.display = el.getAttribute(originalDisplayAttr) || '';
+            el.removeAttribute(originalDisplayAttr);
+        }
+        const original = el.getAttribute(originalAttr);
+        if (original !== null) {
+            el.textContent = original;
+        }
+        el.removeAttribute(originalAttr);
+    },
     _getTextPatterns(type) {
-        const host = String(location.hostname || '').replace(/^www\./, '');
+        const host = this._getHost();
         const isEngagement = type === 'engagement';
 
-        // Shared numeric counter formats (e.g., 23, 3.2?, 12K)
+        // Shared numeric counter formats (e.g., 23, 3.2K, 12K)
         const numericCounter = /^\s*[\d,.]+(?:\.\d+)?\s*(\uCC9C|\uB9CC|\uC5B5|K|M|B)?\s*$/i;
 
         if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
@@ -747,7 +1045,10 @@ const SocialMetricsManager = {
 
     _scanAndMark(type) {
         const selectors = getSocialMetricSelectorsForHost();
-        const list = type === 'engagement' ? selectors.engagement : selectors.exposure;
+        const isInstagram = this._isInstagramHost();
+        const list = isInstagram
+            ? Array.from(new Set([...(selectors.engagement || []), ...(selectors.exposure || [])]))
+            : (type === 'engagement' ? selectors.engagement : selectors.exposure);
         if (!Array.isArray(list) || list.length === 0) return;
         const patterns = this._getTextPatterns(type);
         if (!patterns.length) return;
@@ -756,16 +1057,37 @@ const SocialMetricsManager = {
         const candidates = document.querySelectorAll(list.join(','));
         for (const el of candidates) {
             if (!(el instanceof Element)) continue;
-            const text = (el.textContent || '').trim();
+            const textSource = isInstagram && el.hasAttribute(SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT)
+                ? el.getAttribute(SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT)
+                : el.textContent;
+            const text = (textSource || '').trim();
             if (!text) {
-                if (el.hasAttribute(attr)) el.removeAttribute(attr);
+                if (el.hasAttribute(attr)) {
+                    el.removeAttribute(attr);
+                    if (isInstagram) this._restoreInstagramText(el);
+                }
                 continue;
             }
-            if (patterns.some((re) => re.test(text))) {
-                el.setAttribute(attr, '1');
-            } else if (el.hasAttribute(attr)) {
-                el.removeAttribute(attr);
+            if (!patterns.some((re) => re.test(text))) {
+                if (el.hasAttribute(attr)) {
+                    el.removeAttribute(attr);
+                    if (isInstagram) this._restoreInstagramText(el);
+                }
+                continue;
             }
+            if (isInstagram) {
+                const info = this._getInstagramMetricInfo(el);
+                if (!info || info.type !== type) {
+                    if (el.hasAttribute(attr)) {
+                        el.removeAttribute(attr);
+                        this._restoreInstagramText(el);
+                    }
+                    continue;
+                }
+                this._applyInstagramReplacement(el, info.label, attr);
+                continue;
+            }
+            el.setAttribute(attr, '1');
         }
     },
 
@@ -780,8 +1102,10 @@ const SocialMetricsManager = {
 
     _clearMarks(type) {
         const attr = type === 'engagement' ? SOCIAL_METRIC_ATTRS.ENGAGEMENT : SOCIAL_METRIC_ATTRS.EXPOSURE;
+        const isInstagram = this._isInstagramHost();
         document.querySelectorAll(`[${attr}]`).forEach((el) => {
             try { el.removeAttribute(attr); } catch (_) {}
+            if (isInstagram) this._restoreInstagramText(el);
         });
     },
 
@@ -805,17 +1129,21 @@ const SocialMetricsManager = {
         this._activeEngagement = engagementActive;
         this._activeExposure = exposureActive;
 
+        const isInstagram = this._isInstagramHost();
         let style = document.getElementById(STYLES.SOCIAL_METRICS.ID);
-        if (!style) {
-            style = document.createElement('style');
-            style.id = STYLES.SOCIAL_METRICS.ID;
-            document.head.appendChild(style);
+        if (!isInstagram) {
+            if (!style) {
+                style = document.createElement('style');
+                style.id = STYLES.SOCIAL_METRICS.ID;
+                document.head.appendChild(style);
+            }
+            style.textContent = `
+                [${SOCIAL_METRIC_ATTRS.ENGAGEMENT}="1"] { display: none !important; }
+                [${SOCIAL_METRIC_ATTRS.EXPOSURE}="1"] { display: none !important; }
+            `;
+        } else if (style) {
+            style.remove();
         }
-
-        style.textContent = `
-            [${SOCIAL_METRIC_ATTRS.ENGAGEMENT}="1"] { display: none !important; }
-            [${SOCIAL_METRIC_ATTRS.EXPOSURE}="1"] { display: none !important; }
-        `;
         setRootAttribute(STYLES.SOCIAL_METRICS.ATTR, 'active');
 
         if (!engagementActive) this._clearMarks('engagement');
@@ -846,6 +1174,11 @@ const SocialMetricsManager = {
         this._activeExposure = false;
         this._clearMarks('engagement');
         this._clearMarks('exposure');
+        if (this._isInstagramHost()) {
+            document.querySelectorAll(`[${SOCIAL_METRIC_ATTRS.ORIGINAL_TEXT}]`).forEach((el) => {
+                this._restoreInstagramText(el);
+            });
+        }
     },
 };
 
