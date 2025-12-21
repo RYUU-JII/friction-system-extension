@@ -23,12 +23,16 @@ let statsCache = { dates: {} };
 let cacheLoaded = false;
 let saveTimer = null;
 let savePending = null;
+let idleState = 'active';
+let lastIdleStateCheck = 0;
 let lastActiveTabId = null;  // 현재 활성 탭 ID
 let focusedWindowId = null;  // 현재 포커스된 윈도우 ID (매우 중요)
 
 const TRACKING_INTERVAL_MS = 60_000; // 1 minute
-const MAX_ELAPSED_LIMIT = TRACKING_INTERVAL_MS * 2;
+const LONG_GAP_LIMIT_MS = TRACKING_INTERVAL_MS * 2;
 const MAX_DAYS_STORED = 30;
+const IDLE_DETECTION_SECONDS = 60;
+const IDLE_STATE_CACHE_TTL_MS = 10_000;
 const CACHE_SAVE_INTERVAL_MS = 300000; // 5분 강제 저장
 
 // 5분마다 강제 저장 (데이터 유실 방지 안전장치)
@@ -69,6 +73,36 @@ function ensureAlarm() {
             chrome.alarms.create('oneMinuteTick', { periodInMinutes: 1 });
             console.log("⏰ 알람이 생성되었습니다: oneMinuteTick");
         }
+    });
+}
+
+function setupIdleDetection() {
+    if (!chrome.idle) return;
+    try { chrome.idle.setDetectionInterval(IDLE_DETECTION_SECONDS); } catch (_) {}
+
+    chrome.idle.onStateChanged.addListener((state) => {
+        idleState = state || idleState;
+        lastIdleStateCheck = Date.now();
+    });
+
+    chrome.idle.queryState(IDLE_DETECTION_SECONDS, (state) => {
+        if (chrome.runtime.lastError) return;
+        idleState = state || idleState;
+        lastIdleStateCheck = Date.now();
+    });
+}
+
+function getIdleState() {
+    if (!chrome.idle) return Promise.resolve('active');
+    const now = Date.now();
+    if (now - lastIdleStateCheck < IDLE_STATE_CACHE_TTL_MS) return Promise.resolve(idleState);
+    lastIdleStateCheck = now;
+    return new Promise((resolve) => {
+        chrome.idle.queryState(IDLE_DETECTION_SECONDS, (state) => {
+            if (chrome.runtime.lastError) return resolve(idleState);
+            idleState = state || idleState;
+            resolve(idleState);
+        });
     });
 }
 
@@ -268,14 +302,28 @@ async function calculateTabTime(hostname, now, isActive, blockedUrlsOverride = n
     }
 
     let elapsed = now - lastTime;
-    if (elapsed > MAX_ELAPSED_LIMIT) elapsed = MAX_ELAPSED_LIMIT; // 너무 큰 간격은 보정
+    if (elapsed > LONG_GAP_LIMIT_MS) {
+        domainData.lastTrackedTime = now;
+        return true;
+    }
 
-    // 100ms 미만은 노이즈로 보고 무시 (연산 최적화)
+    const idleStateNow = await getIdleState();
+    if (idleStateNow !== 'active') {
+        if (domainData.lastTrackedTime !== now) {
+            domainData.lastTrackedTime = now;
+            return true;
+        }
+        return false;
+    }
+
+    // Ignore tiny gaps to reduce noise.
     if (elapsed < 100) return false;
 
     const timeType = isActive ? 'active' : 'background';
     domainData[timeType] += elapsed;
-    addElapsedToHourly(domainData, lastTime, now, isActive);
+    // Keep hourly buckets aligned with the recorded elapsed window.
+    const effectiveStart = now - elapsed;
+    addElapsedToHourly(domainData, effectiveStart, now, isActive);
     
     // 타임스탬프 갱신 (중요: 이 시점까지 정산 완료됨을 의미)
     domainData.lastTrackedTime = now;
@@ -737,6 +785,7 @@ function applyFriction(level) {
 async function init() {
     await loadStatsCache();
     ensureAlarm();
+    setupIdleDetection();
 
     try {
         const win = await chrome.windows.getLastFocused({ populate: true });
