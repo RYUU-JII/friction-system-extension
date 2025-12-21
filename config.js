@@ -28,5 +28,7 @@ export const CONFIG_DEFAULT_FILTER_SETTINGS = {
     textBlur: { isActive: false, value: CONFIG_DEFAULT_TEXT_BLUR_VALUE },
     textShadow: { isActive: false, value: CONFIG_DEFAULT_TEXT_SHADOW_VALUE },
     textShuffle: { isActive: false, value: CONFIG_DEFAULT_TEXT_SHUFFLE_PROBABILITY },
+    socialEngagement: { isActive: false, value: '' },
+    socialExposure: { isActive: false, value: '' },
     inputDelay: { isActive: false, value: CONFIG_DEFAULT_INPUT_DELAY_MS },
 };

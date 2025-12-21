@@ -37,6 +37,11 @@ function mergeFilterSettings(partial) {
     if (!(key in merged)) merged[key] = value;
   }
 
+  if (source.socialMetrics?.isActive) {
+    if (!source.socialEngagement) merged.socialEngagement.isActive = true;
+    if (!source.socialExposure) merged.socialExposure.isActive = true;
+  }
+
   return merged;
 }
 
