@@ -171,12 +171,8 @@ function reconcileHourlyToTotal(hourly, totalMs) {
     if (sum === target) return base;
 
     if (sum <= 0) {
-        if (target <= 0) return base;
-        const per = Math.floor(target / 24);
-        const rem = target - per * 24;
-        const out = Array(24).fill(per);
-        for (let i = 0; i < rem; i++) out[i] += 1;
-        return out;
+        // No hourly signal to reconcile; avoid fabricating a full-day distribution.
+        return base;
     }
 
     const scale = target / sum;
