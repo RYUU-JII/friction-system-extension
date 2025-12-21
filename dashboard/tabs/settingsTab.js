@@ -64,6 +64,30 @@ const SETTING_METADATA_V2 = {
   textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', tier: 'basic', order: 20, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
   textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', tier: 'advanced', order: 30, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
   textShuffle: { label: '텍스트 셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', tier: 'advanced', order: 40, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
+  socialEngagement: {
+    label: '사회적 지표 숨김',
+    control: 'toggle',
+    type: 'boolean',
+    unit: '',
+    unitSuffix: '',
+    storage: 'raw',
+    category: 'misc',
+    tier: 'basic',
+    order: 10,
+    helper: '좋아요/리포스트/댓글 좋아요 등 반응 지표를 숨깁니다.',
+  },
+  socialExposure: {
+    label: '노출·신선도 지표 숨김',
+    control: 'toggle',
+    type: 'boolean',
+    unit: '',
+    unitSuffix: '',
+    storage: 'raw',
+    category: 'misc',
+    tier: 'basic',
+    order: 20,
+    helper: '조회수/업로드 시간 등 노출·신선도 지표를 숨깁니다.',
+  },
   delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', tier: 'advanced', order: 40, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
   clickDelay: { label: '클릭 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 10, placeholder: '1000', min: '0', max: '3000', step: '50' },
   scrollFriction: { label: '스크롤 마찰', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '300', step: '10' },
@@ -431,7 +455,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   }
 
   function setActiveSettingsSubtabV2(next) {
-    const nextTab = next === 'text' || next === 'delay' || next === 'game' ? next : 'media';
+    const nextTab = next === 'text' || next === 'delay' || next === 'misc' || next === 'game' ? next : 'media';
     if (currentSettingsSubtab === nextTab) return;
 
     collectSettingsFromGridV2();
@@ -608,21 +632,17 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   function createSettingCard(key, meta, setting) {
     const inputValue = valueForInputV2(meta, setting.value);
     const inputId = `setting-${key}`;
+    const isToggleOnly = meta.control === 'toggle';
     const control = meta.control === 'text' ? 'text' : 'range';
     const isActive = !!setting.isActive;
 
     const card = document.createElement('div');
     card.className = 'setting-card';
     card.dataset.key = key;
-    card.innerHTML = `
-      <div class="setting-header">
-        <label for="${inputId}">${meta.label}</label>
-        <label class="switch">
-          <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="setting-control">
+    if (isToggleOnly) card.classList.add('is-toggle-only');
+    const controlMarkup = isToggleOnly
+      ? `<div class="setting-helper">${meta.helper || ''}</div>`
+      : `
         <input
           id="${inputId}"
           class="input-value ${control === 'range' ? 'input-range' : ''}"
@@ -643,6 +663,17 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
             ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
             : `<span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>`
         }
+      `;
+    card.innerHTML = `
+      <div class="setting-header">
+        <label for="${inputId}">${meta.label}</label>
+        <label class="switch">
+          <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-control">
+        ${controlMarkup}
       </div>
     `;
 
@@ -790,6 +821,16 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   function displaySettingsV2() {
     if (!UI.settingsGrid) return;
     UI.settingsGrid.innerHTML = '';
+
+    if (currentSettingsSubtab === 'misc') {
+      const section = document.createElement('div');
+      section.className = 'settings-section';
+      section.innerHTML = `
+        <div class="settings-section-title">소셜 매트릭스 필터</div>
+        <div class="settings-section-desc">좋아요, 조회수, 업로드 시간 같은 숫자 지표를 숨깁니다. 추후 숏폼 끄기 같은 실험 옵션도 여기에 추가됩니다.</div>
+      `;
+      UI.settingsGrid.appendChild(section);
+    }
 
     const entries = Object.entries(SETTING_METADATA_V2)
       .filter(([, meta]) => meta.category === currentSettingsSubtab)

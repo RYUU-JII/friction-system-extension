@@ -22,6 +22,7 @@ const STYLES = {
     SPACING: { ID: 'friction-spacing-style', ATTR: 'data-spacing-applied' },
     TEXT_SHUFFLE: { ID: 'friction-text-shuffle-style', ATTR: 'data-text-shuffle-pending' },
     INPUT_DELAY: { ID: 'friction-input-delay-style', ATTR: 'data-input-delay-applied' },
+    SOCIAL_METRICS: { ID: 'friction-social-metrics-style', ATTR: 'data-social-metrics-applied' },
 };
 
 let anxietyBuffer = {
@@ -69,6 +70,67 @@ const SELECTORS = {
     TEXT_VISUAL_TARGETS: ':is(span:not([role]), span[role="text"], a:not(:has(img, video, canvas, svg)), p:not(:has(img, video, canvas, svg)), li:not(:has(img, video, canvas, svg)), h1:not(:has(img, video, canvas, svg)), h2:not(:has(img, video, canvas, svg)), h3:not(:has(img, video, canvas, svg)), h4:not(:has(img, video, canvas, svg)), h5:not(:has(img, video, canvas, svg)), h6:not(:has(img, video, canvas, svg)), blockquote:not(:has(img, video, canvas, svg)))',
     TEXT_TARGETS: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])',
     
+};
+
+const SOCIAL_METRIC_ATTRS = {
+    ENGAGEMENT: 'data-friction-social-engagement',
+    EXPOSURE: 'data-friction-social-exposure',
+};
+
+const SOCIAL_METRIC_SELECTORS = {
+    youtube: {
+        engagement: [
+            '#vote-count-middle',
+            'ytd-comment-action-buttons-renderer #vote-count-middle',
+            'ytd-toggle-button-renderer #text',
+            'ytd-segmented-like-dislike-button-renderer #text',
+            '.yt-spec-button-shape-next__button-text-content',
+        ],
+        exposure: [
+            'ytd-video-view-count-renderer span.style-scope.yt-formatted-string',
+            'ytd-watch-metadata #info-strings yt-formatted-string',
+            'ytd-watch-metadata #info-strings span.style-scope.yt-formatted-string',
+            'ytd-video-meta-block #metadata-line span',
+            'ytd-video-renderer #metadata-line span',
+            'ytd-compact-video-renderer #metadata-line span',
+            'ytd-rich-grid-media #metadata-line span',
+            'ytd-grid-video-renderer #metadata-line span',
+            'ytd-playlist-video-renderer #metadata-line span',
+            'span.yt-core-attributed-string.yt-content-metadata-view-model__metadata-text',
+            '.ytp-modern-videowall-still-view-count-and-date-info',
+        ],
+    },
+    x: {
+        engagement: [
+            '[data-testid="like"] span',
+            '[data-testid="retweet"] span',
+            '[data-testid="reply"] span',
+            '[data-testid="quoteTweet"] span',
+            '[data-testid="bookmark"] span',
+        ],
+        exposure: [
+            '[data-testid="viewCount"] span',
+            'a[href*="/analytics"] span',
+        ],
+    },
+    instagram: {
+        engagement: [
+            'article span[role="button"][tabindex="0"]',
+            'section[role="dialog"] span[role="button"][tabindex="0"]',
+            'div[role="dialog"] span[role="button"][tabindex="0"]',
+            'header a[href*="/followers/"] span',
+            'header a[href*="/following/"] span',
+            'header span.html-span',
+            'section[role="dialog"] span.html-span',
+            'div[role="dialog"] span.html-span',
+        ],
+        exposure: [
+            'time[datetime]',
+            'article time[datetime]',
+            'section[role="dialog"] time[datetime]',
+            'div[role="dialog"] time[datetime]',
+        ],
+    },
 };
 
 // ===========================================================
@@ -624,6 +686,166 @@ const HoverRevealManager = {
         try { this.currentScope.removeAttribute('data-friction-reveal'); } catch (_) {}
         this.currentScope = null;
         this._sweepRevealMarks(null);
+    },
+};
+
+function getSocialMetricSelectorsForHost() {
+    const host = String(location.hostname || '').replace(/^www\./, '');
+    if (host === 'youtube.com' || host.endsWith('.youtube.com')) return SOCIAL_METRIC_SELECTORS.youtube;
+    if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com')) {
+        return SOCIAL_METRIC_SELECTORS.x;
+    }
+    if (host === 'instagram.com' || host.endsWith('.instagram.com')) return SOCIAL_METRIC_SELECTORS.instagram;
+    return { engagement: [], exposure: [] };
+}
+
+const SocialMetricsManager = {
+    _observer: null,
+    _scanTimer: null,
+    _activeEngagement: false,
+    _activeExposure: false,
+    _getTextPatterns(type) {
+        const host = String(location.hostname || '').replace(/^www\./, '');
+        const isEngagement = type === 'engagement';
+
+        // Shared numeric counter formats (e.g., 23, 3.2?, 12K)
+        const numericCounter = /^\s*[\d,.]+(?:\.\d+)?\s*(\uCC9C|\uB9CC|\uC5B5|K|M|B)?\s*$/i;
+
+        if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+            if (isEngagement) {
+                return [numericCounter];
+            }
+            return [
+                /\uC870\uD68C\uC218|views?/i,
+                /\d+\s*(\uCD08|\uBD84|\uC2DC\uAC04|\uC77C|\uC8FC|\uAC1C\uC6D4|\uB144)\s*\uC804/i,
+                /^\s*[\d,.]+(?:\.\d+)?\s*(\uCC9C|\uB9CC|\uC5B5|K|M|B)?\s*\uD68C?\s*$/i,
+            ];
+        }
+
+        if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com')) {
+            // X counters are usually plain numbers (or K/M).
+            return [numericCounter];
+        }
+
+        if (host === 'instagram.com' || host.endsWith('.instagram.com')) {
+            if (isEngagement) {
+                return [
+                    /\uC88B\uC544\uC694|like|likes|followers?|following/i,
+                    numericCounter,
+                ];
+            }
+            return [
+                /\uC870\uD68C|views?/i,
+                /\d+\s*(\uCD08|\uBD84|\uC2DC\uAC04|\uC77C|\uC8FC|\uAC1C\uC6D4|\uB144)\s*\uC804/i,
+                /^\s*\d+\s*\uC77C\s*$/i,
+                /^\s*[\d,.]+(?:\.\d+)?\s*(\uCC9C|\uB9CC|\uC5B5|K|M|B)?\s*\uD68C?\s*$/i,
+            ];
+        }
+
+        return [];
+    },
+
+    _scanAndMark(type) {
+        const selectors = getSocialMetricSelectorsForHost();
+        const list = type === 'engagement' ? selectors.engagement : selectors.exposure;
+        if (!Array.isArray(list) || list.length === 0) return;
+        const patterns = this._getTextPatterns(type);
+        if (!patterns.length) return;
+
+        const attr = type === 'engagement' ? SOCIAL_METRIC_ATTRS.ENGAGEMENT : SOCIAL_METRIC_ATTRS.EXPOSURE;
+        const candidates = document.querySelectorAll(list.join(','));
+        for (const el of candidates) {
+            if (!(el instanceof Element)) continue;
+            const text = (el.textContent || '').trim();
+            if (!text) {
+                if (el.hasAttribute(attr)) el.removeAttribute(attr);
+                continue;
+            }
+            if (patterns.some((re) => re.test(text))) {
+                el.setAttribute(attr, '1');
+            } else if (el.hasAttribute(attr)) {
+                el.removeAttribute(attr);
+            }
+        }
+    },
+
+    _scheduleScan() {
+        if (this._scanTimer) return;
+        this._scanTimer = setTimeout(() => {
+            this._scanTimer = null;
+            if (this._activeEngagement) this._scanAndMark('engagement');
+            if (this._activeExposure) this._scanAndMark('exposure');
+        }, 120);
+    },
+
+    _clearMarks(type) {
+        const attr = type === 'engagement' ? SOCIAL_METRIC_ATTRS.ENGAGEMENT : SOCIAL_METRIC_ATTRS.EXPOSURE;
+        document.querySelectorAll(`[${attr}]`).forEach((el) => {
+            try { el.removeAttribute(attr); } catch (_) {}
+        });
+    },
+
+    update(engagementSetting, exposureSetting) {
+        const engagementActive = !!engagementSetting?.isActive;
+        const exposureActive = !!exposureSetting?.isActive;
+        if (!engagementActive && !exposureActive) {
+            this.remove();
+            return;
+        }
+
+        const selectors = getSocialMetricSelectorsForHost();
+        const hasSelectors =
+            Array.isArray(selectors.engagement) && selectors.engagement.length > 0 ||
+            Array.isArray(selectors.exposure) && selectors.exposure.length > 0;
+        if (!hasSelectors) {
+            this.remove();
+            return;
+        }
+
+        this._activeEngagement = engagementActive;
+        this._activeExposure = exposureActive;
+
+        let style = document.getElementById(STYLES.SOCIAL_METRICS.ID);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = STYLES.SOCIAL_METRICS.ID;
+            document.head.appendChild(style);
+        }
+
+        style.textContent = `
+            [${SOCIAL_METRIC_ATTRS.ENGAGEMENT}="1"] { display: none !important; }
+            [${SOCIAL_METRIC_ATTRS.EXPOSURE}="1"] { display: none !important; }
+        `;
+        setRootAttribute(STYLES.SOCIAL_METRICS.ATTR, 'active');
+
+        if (!engagementActive) this._clearMarks('engagement');
+        if (!exposureActive) this._clearMarks('exposure');
+        if (engagementActive) this._scanAndMark('engagement');
+        if (exposureActive) this._scanAndMark('exposure');
+        if (!this._observer) {
+            this._observer = new MutationObserver(() => this._scheduleScan());
+            try {
+                this._observer.observe(document.documentElement || document, { childList: true, subtree: true, characterData: true });
+            } catch (_) {}
+        }
+    },
+
+    remove() {
+        const style = document.getElementById(STYLES.SOCIAL_METRICS.ID);
+        if (style) style.remove();
+        setRootAttribute(STYLES.SOCIAL_METRICS.ATTR, 'none');
+        if (this._observer) {
+            try { this._observer.disconnect(); } catch (_) {}
+            this._observer = null;
+        }
+        if (this._scanTimer) {
+            try { clearTimeout(this._scanTimer); } catch (_) {}
+            this._scanTimer = null;
+        }
+        this._activeEngagement = false;
+        this._activeExposure = false;
+        this._clearMarks('engagement');
+        this._clearMarks('exposure');
     },
 };
 
@@ -2264,6 +2486,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       if (typeof request?.isBlocked === 'boolean' && !request.isBlocked) {
           VisualManager.remove();
+          SocialMetricsManager.remove();
           DelayManager.remove();
           TextManager.remove();
           TextShuffleManager.disable();
@@ -2287,6 +2510,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     else removeRootAttribute('data-friction-hover-reveal');
      
     VisualManager.update(filters);
+    SocialMetricsManager.update(filters.socialEngagement, filters.socialExposure);
 
     if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
     else DelayManager.remove();
@@ -2322,9 +2546,11 @@ chrome.storage.local.get({
             hoverReveal: { isActive: true, value: '' },
             letterSpacing: { isActive: false, value: '0.1em' },
             textOpacity: { isActive: false, value: '1' },
-            textBlur: { isActive: false, value: '0.3px' },
+           textBlur: { isActive: false, value: '0.3px' },
             textShadow: { isActive: false, value: '0 1px 0 rgba(0,0,0,0.25)' },
            textShuffle: { isActive: false, value: 0.15 },
+          socialEngagement: { isActive: false, value: '' },
+          socialExposure: { isActive: false, value: '' },
            inputDelay: { isActive: false, value: 120 },
       } 
   }, (items) => {
@@ -2347,6 +2573,7 @@ chrome.storage.local.get({
           if (filters.clickDelay?.isActive) InteractionManager.applyClickDelay(filters.clickDelay.value);
           if (filters.scrollFriction?.isActive) InteractionManager.applyScroll(filters.scrollFriction.value);
           VisualManager.update(filters);
+          SocialMetricsManager.update(filters.socialEngagement, filters.socialExposure);
       }
   });
 
