@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Friction: 리캡 & 포커스",
+  "version": "1.0.0",
+  "description": "사용 습관을 추적하고 마찰(Friction) 필터를 적용합니다.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms",
+    "idle"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "entries/background/index.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "pages/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "pages/dashboard.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["styles/friction.css"],
+      "js": ["entries/content/earlyApplyLoader.js", "entries/content/loader.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "entries/content/*.js",
+        "chunks/*.js",
+        "samples/images/*.gif",
+        "samples/sounds/*.mp3"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+
