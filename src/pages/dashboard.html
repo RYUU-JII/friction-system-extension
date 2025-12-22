@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Friction System | Dashboard</title>
+    <link rel="stylesheet" href="../features/dashboard/dashboard.css" />
+  </head>
+  <body>
+    <div class="sidebar">
+      <h2>Friction</h2>
+      <nav>
+        <button class="nav-btn active" data-tab="overview"><span>◈</span> Overview</button>
+        <button class="nav-btn" data-tab="detailed-recap"><span>▤</span> Detailed Recap</button>
+        <button class="nav-btn" data-tab="blocklist"><span>⊘</span> 차단 관리</button>
+        <button class="nav-btn" data-tab="settings"><span>⚙</span> 필터 설정</button>
+        <button class="nav-btn" data-tab="schedule"><span>⊙</span> 스케줄</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="theme-switch-wrapper">
+          <span class="theme-label">🌙 다크 모드</span>
+          <label class="switch">
+            <input type="checkbox" id="darkModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <section id="overview" class="tab-content active">
+        <header>
+          <h1>사용 개요</h1>
+          <p>오늘의 활동 패턴과 어제 대비 변화를 한눈에 확인하세요.</p>
+        </header>
+
+        <div class="overview-carousel" id="overviewCarousel" aria-roledescription="carousel" aria-label="사용 개요 카드">
+          <div class="overview-carousel-track" id="overviewCarouselTrack">
+            <article class="overview-slide" data-slide-title="오늘 많이 사용" aria-label="오늘 많이 사용">
+              <div class="recap-header">
+                <h3>🏆 오늘 가장 많이 사용한 사이트 (Top 5)</h3>
+                <p class="section-desc">포그라운드(활성 탭) 사용 시간 기준입니다.</p>
+              </div>
+              <div class="recap-list" id="topUsedList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="백그라운드" aria-label="백그라운드">
+              <div class="recap-header">
+                <h3 style="color: var(--accent);">👻 백그라운드 체류 (Top 5)</h3>
+                <p class="section-desc">탭은 열려있지만 활성화되지 않았던 체류 시간입니다.</p>
+              </div>
+              <div class="recap-list" id="backgroundList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="증가" aria-label="증가">
+              <div class="recap-header">
+                <h3 style="color: var(--color-blocked);">🔥 어제보다 더 많이 사용했어요 (Top 5)</h3>
+                <p class="section-desc">포그라운드 기준으로 사용 시간이 늘어난 사이트입니다.</p>
+              </div>
+              <div class="recap-list" id="increaseList"></div>
+            </article>
+
+            <article class="overview-slide" data-slide-title="감소" aria-label="감소">
+              <div class="recap-header">
+                <h3 style="color: var(--color-safe);">✅ 집중력을 잘 유지하고 있어요 (Top 5)</h3>
+                <p class="section-desc">포그라운드 기준으로 사용 시간이 줄어든 사이트입니다.</p>
+              </div>
+              <div class="recap-list" id="decreaseList"></div>
+            </article>
+          </div>
+
+          <div class="overview-carousel-controls" aria-label="개요 카드 이동">
+            <button type="button" class="carousel-btn" id="overviewPrev" aria-label="이전 카드">‹</button>
+            <div class="carousel-dots" id="overviewDots" role="tablist" aria-label="개요 카드 목록"></div>
+            <button type="button" class="carousel-btn" id="overviewNext" aria-label="다음 카드">›</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="detailed-recap" class="tab-content">
+        <header>
+          <h1>상세 리캡</h1>
+          <p>일간/주간 사용 시간과 차단 비중을 그래프로 확인해 보세요.</p>
+        </header>
+
+        <div class="card" style="padding: 10px 24px">
+          <div class="recap-mode-toggle">
+            <div class="sort-options">
+              <button id="toggleDaily" class="active">일간 분석</button>
+              <button id="toggleWeekly">주간 분석</button>
+            </div>
+            <input type="date" id="dailyDate" class="date-input is-inline" />
+          </div>
+        </div>
+
+        <div class="detailed-analysis active" id="dailyAnalysis">
+          <div class="summary-cards">
+            <div class="summary-card">총 사용 시간: <span id="dailyTotal">0초</span></div>
+            <div class="summary-card">차단 시간: <span id="dailyBlocked">0초</span></div>
+            <div class="summary-card change-card">전일 대비 <span id="dailyChange"></span></div>
+          </div>
+          <div class="chart-header">
+            <div class="chart-legend" aria-label="그래프 범례">
+              <span class="legend-item"><span class="legend-swatch swatch-total"></span>사용 시간</span>
+              <span class="legend-item"><span class="legend-swatch swatch-blocked"></span>차단(마찰) 시간</span>
+            </div>
+            <div class="chart-insight" id="dailyInsight"></div>
+          </div>
+          <div class="graph-container" id="dailyGraph"></div>
+          <div class="graph-label">시간 (0h - 23h)</div>
+
+          <div class="reveal-section is-visible" style="margin-top: 16px">
+            <div class="recap-header">
+              <h3 style="margin: 0">사이트별 누적 사용시간</h3>
+              <p class="section-desc">선택한 날짜의 포그라운드 누적시간을 전체 사이트로 표시합니다.</p>
+            </div>
+            <div class="recap-list" id="dailyAllSitesList"></div>
+          </div>
+        </div>
+
+        <div class="detailed-analysis" id="weeklyAnalysis">
+          <div class="summary-cards">
+            <div class="summary-card">총 사용 시간: <span id="weeklyTotal">0초</span></div>
+            <div class="summary-card">차단 시간: <span id="weeklyBlocked">0초</span></div>
+            <div class="summary-card change-card">전주 대비 <span id="weeklyChange"></span></div>
+          </div>
+          <div class="chart-header">
+            <div class="chart-legend" aria-label="그래프 범례">
+              <span class="legend-item"><span class="legend-swatch swatch-total"></span>사용 시간</span>
+              <span class="legend-item"><span class="legend-swatch swatch-blocked"></span>차단(마찰) 시간</span>
+            </div>
+            <div class="chart-insight" id="weeklyInsight"></div>
+          </div>
+          <div class="graph-container" id="weeklyGraph"></div>
+          <div class="graph-label">요일 (일 ~ 토)</div>
+
+          <div class="reveal-section is-visible" style="margin-top: 16px">
+            <div class="recap-header">
+              <h3 style="margin: 0">사이트별 주간 누적 사용시간</h3>
+              <p class="section-desc">최근 7일 포그라운드 누적시간을 전체 사이트로 표시합니다.</p>
+            </div>
+            <div class="recap-list" id="weeklyAllSitesList"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="blocklist" class="tab-content">
+        <header>
+          <h1>차단 관리</h1>
+          <p>방해되는 사이트 도메인을 등록하면 마찰 필터가 자동 적용돼요.</p>
+        </header>
+
+        <div class="card block-add-panel">
+          <input type="text" id="newBlockUrl" placeholder="차단할 도메인 입력 (예: youtube.com)" />
+          <button id="addBlockBtn" class="primary-btn">차단 추가</button>
+        </div>
+
+        <ul class="block-list" id="blockedListDisplay"></ul>
+      </section>
+
+      <section id="settings" class="tab-content">
+        <header>
+          <h1>필터 설정</h1>
+          <p>미디어/텍스트/지연 필터를 분리해서 원하는 강도로 조절해 보세요.</p>
+        </header>
+
+        <div class="card settings-subtabs" role="tablist" aria-label="필터 설정 분류" style="margin-bottom: 16px">
+          <button type="button" class="settings-subtab-btn is-active" data-settings-subtab="media" role="tab" aria-selected="true">미디어 필터</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="text" role="tab" aria-selected="false">텍스트 필터</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="delay" role="tab" aria-selected="false">지연 필터</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="misc" role="tab" aria-selected="false">기타</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="game" role="tab" aria-selected="false">게임 테스트</button>
+        </div>
+
+        <div class="card settings-preview" id="settingsPreview" style="margin-bottom: 16px">
+          <div class="settings-preview-header">
+            <div class="settings-preview-title">
+              <h3 style="margin: 0">예시 미리보기</h3>
+              <p id="settingsPreviewDescription" style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px"></p>
+            </div>
+            <label class="settings-preview-hover-toggle">
+              <span class="settings-preview-hover-label">호버 시 필터 해제</span>
+              <span class="switch">
+                <input id="hoverRevealToggle" type="checkbox" />
+                <span class="slider"></span>
+              </span>
+            </label>
+          </div>
+          <div class="settings-preview-grid">
+            <div class="preview-col">
+              <div class="preview-col-label">Before</div>
+              <div class="preview-frame" id="previewBefore"></div>
+            </div>
+            <div class="preview-col">
+              <div class="preview-col-label">After</div>
+              <div class="preview-frame" id="previewAfter"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card is-hidden" id="nudgeDebugPanel" style="margin-bottom: 16px">
+          <div class="settings-preview-header" style="margin-bottom: 10px">
+            <div class="settings-preview-title">
+              <h3 style="margin: 0">게임(개입) 테스트</h3>
+              <p style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px">
+                활성 탭(최근 사용 탭)에 스폰하여 움직임을 확인하고 튜닝합니다.
+              </p>
+            </div>
+          </div>
+
+          <h4 class="nudge-section-title">자동 개입(누적시간)</h4>
+          <p class="nudge-section-desc">차단 사이트 누적 시간이 기준을 넘으면 자동으로 스폰됩니다. 기본값은 OFF입니다.</p>
+          <div class="nudge-debug-grid">
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">사용</span>
+              <label class="switch" style="justify-self: start">
+                <input id="nudgeAutoToggle" type="checkbox" />
+                <span class="slider"></span>
+              </label>
+              <output id="nudgeAutoToggleOutput" class="nudge-debug-output">OFF</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">기준</span>
+              <input id="nudgeAutoThresholdRange" type="range" min="5" max="240" step="5" value="30" />
+              <output id="nudgeAutoThresholdOutput" class="nudge-debug-output">30분</output>
+            </label>
+          </div>
+
+          <hr class="nudge-divider" />
+          <h4 class="nudge-section-title">수동 테스트</h4>
+
+          <div class="nudge-debug-grid">
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">크기</span>
+              <input id="nudgeSizeRange" type="range" min="32" max="220" step="2" value="96" />
+              <output id="nudgeSizeOutput" class="nudge-debug-output">96px</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">속도</span>
+              <input id="nudgeSpeedRange" type="range" min="30" max="600" step="10" value="140" />
+              <output id="nudgeSpeedOutput" class="nudge-debug-output">140</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">스폰 간격</span>
+              <input id="nudgeSpawnIntervalRange" type="range" min="300" max="10000" step="100" value="4000" />
+              <output id="nudgeSpawnIntervalOutput" class="nudge-debug-output">4000ms</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">최대 개수</span>
+              <input id="nudgeMaxSpritesRange" type="range" min="1" max="20" step="1" value="6" />
+              <output id="nudgeMaxSpritesOutput" class="nudge-debug-output">6</output>
+            </label>
+            <label class="nudge-debug-row">
+              <span class="nudge-debug-label">가속(배율)</span>
+              <input id="nudgeSpeedRampRange" type="range" min="1" max="2" step="0.05" value="1.15" />
+              <output id="nudgeSpeedRampOutput" class="nudge-debug-output">1.15x</output>
+            </label>
+          </div>
+
+          <div class="nudge-debug-actions">
+            <button id="nudgeSpawnBtn" class="primary-btn" type="button">스폰</button>
+            <button id="nudgeStopBtn" class="primary-btn nudge-debug-stop" type="button">정지</button>
+            <button id="resetStatsBtn" class="primary-btn nudge-debug-stop" type="button">테스트: 통계 초기화</button>
+            <span id="nudgeDebugStatus" class="nudge-debug-status"></span>
+          </div>
+        </div>
+
+        <div class="settings-grid" id="settingsGrid"></div>
+      </section>
+
+      <section id="schedule" class="tab-content">
+        <header>
+          <h1>스케줄</h1>
+          <p>특정 시간에만 마찰 필터가 작동하도록 설정할 수 있어요.</p>
+        </header>
+
+        <div class="card schedule-panel">
+          <label class="switch-label" style="display: flex; justify-content: space-between; align-items: center">
+            <span>스케줄 기반 필터 활성화</span>
+            <label class="switch">
+              <input type="checkbox" id="schedule-toggle" />
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+
+        <div class="card time-slider-container" id="time-slider-container">
+          <div class="time-display">
+            <span id="start-time-display">00:00</span>
+            <span class="separator">~</span>
+            <span id="end-time-display">24:00</span>
+          </div>
+          <div class="slider-track-wrapper">
+            <div class="slider-track"></div>
+            <div class="slider-range" id="slider-range"></div>
+            <div class="slider-handle" id="handle-start"></div>
+            <div class="slider-handle" id="handle-end"></div>
+          </div>
+        </div>
+
+        
+      </section>
+    </div>
+
+    <script src="../entries/dashboard/index.js" type="module"></script>
+  </body>
+</html>
