@@ -1,0 +1,26 @@
+/* Blocklist Styles */
+.block-add-panel {
+    display: flex; gap: 10px; align-items: center;
+}
+.block-add-panel input {
+    flex-grow: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main);
+}
+.block-list {
+    list-style: none; padding: 0; margin-top: 20px;
+}
+.block-list li {
+    display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; margin-bottom: 8px;
+    background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);
+}
+.block-list li span { font-weight: 500; }
+.block-list .list-block-btn,
+.block-list .list-block-btn.is-blocked {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-fg);
+    border-color: var(--btn-danger-border);
+}
+.block-list .list-block-btn:hover,
+.block-list .list-block-btn.is-blocked:hover {
+    background: var(--btn-danger-hover);
+}
+
