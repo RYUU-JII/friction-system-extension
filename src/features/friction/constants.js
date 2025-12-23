@@ -9,7 +9,6 @@ export const ROOT_ATTRS = {
   TEXT_SHUFFLE_PENDING: 'data-friction-text-shuffle-pending',
   INPUT_DELAY: 'data-friction-input-delay-active',
   SOCIAL_METRICS: 'data-friction-social-metrics',
-  HOVER_REVEAL: 'data-friction-hover-reveal',
 };
 
 export const ROOT_STATE_ATTRS = {

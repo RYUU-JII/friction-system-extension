@@ -1,3 +1,5 @@
+/* friction.css */
+
 :root {
   --f-blur: 0px;
   --f-desat: 0%;
@@ -8,20 +10,85 @@
   --f-text-opacity: 1;
 }
 
-html[data-friction-visual="1"] [data-friction-visual-target],
-html[data-friction-visual="1"] [data-friction-visual-video] {
+/**
+ * 1. Visual filter (CSS-first)
+ * Filters apply without JS marks.
+ */
+html[data-friction-visual="1"] :is(article, main, section, figure, [role="article"], [role="main"]) :is(
+  img,
+  picture,
+  canvas,
+  video,
+  [role="img"]
+),
+html[data-friction-visual="1"] :is(article, main, section, figure, [role="article"], [role="main"]) :is(
+  [style*="background-image"]
+),
+html[data-friction-visual="1"] :is(article, main, section, figure, [role="article"], [role="main"])[style*="background-image"],
+html[data-friction-visual="1"] :is(article, [data-testid="tweet"], [data-testid="tweetPhoto"]) :is(
+  img,
+  picture,
+  canvas,
+  video,
+  [role="img"]
+),
+html[data-friction-visual="1"] :is(article, [data-testid="tweet"], [data-testid="tweetPhoto"]) :is(
+  [style*="background-image"]
+),
+html[data-friction-visual="1"] :is(article, [data-testid="tweet"], [data-testid="tweetPhoto"])[style*="background-image"],
+html[data-friction-visual="1"] :is(
+  ytd-thumbnail,
+  #thumbnail,
+  ytd-rich-grid-media,
+  ytd-video-renderer,
+  ytd-grid-video-renderer,
+  ytd-compact-video-renderer,
+  ytd-playlist-video-renderer,
+  ytd-reel-item-renderer,
+  ytd-reel-video-renderer,
+  .ytp-videowall-still
+) :is(img, picture, canvas, video, [role="img"]),
+html[data-friction-visual="1"] :is(
+  ytd-thumbnail,
+  #thumbnail,
+  ytd-rich-grid-media,
+  ytd-video-renderer,
+  ytd-grid-video-renderer,
+  ytd-compact-video-renderer,
+  ytd-playlist-video-renderer,
+  ytd-reel-item-renderer,
+  ytd-reel-video-renderer,
+  .ytp-videowall-still
+) :is([style*="background-image"]),
+html[data-friction-visual="1"] :is(
+  ytd-thumbnail,
+  #thumbnail,
+  ytd-rich-grid-media,
+  ytd-video-renderer,
+  ytd-grid-video-renderer,
+  ytd-compact-video-renderer,
+  ytd-playlist-video-renderer,
+  ytd-reel-item-renderer,
+  ytd-reel-video-renderer,
+  .ytp-videowall-still
+)[style*="background-image"] {
   filter: blur(var(--f-blur)) grayscale(var(--f-desat)) !important;
-  transition: filter 0.15s ease;
+  transition: filter 0.1s ease;
+  will-change: filter;
 }
 
-html[data-friction-visual="1"] [data-friction-reveal="1"],
-html[data-friction-visual="1"] [data-friction-reveal="1"] [data-friction-visual-target],
-html[data-friction-visual="1"] [data-friction-visual-target][data-friction-reveal="1"],
-html[data-friction-visual="1"] [data-friction-reveal="1"] [data-friction-visual-video],
-html[data-friction-visual="1"] [data-friction-visual-video][data-friction-reveal="1"] {
-  filter: none !important;
+/**
+ * 2. JS-marked fallback (container marked, descendants styled)
+ */
+html[data-friction-visual="1"] [data-friction-visual-target="1"] :is(
+  img, picture, canvas, video, [role="img"], [style*="background-image"]
+) {
+  filter: blur(var(--f-blur)) grayscale(var(--f-desat)) !important;
 }
 
+/**
+ * 4. 인터랙티브 및 텍스트 레이아웃
+ */
 html[data-friction-delay="1"] [data-friction-interactive] {
   transition: all var(--f-delay) ease !important;
 }
@@ -31,6 +98,9 @@ html[data-friction-letter-spacing="1"] [data-friction-text-layout] {
   transition: letter-spacing 0.3s ease;
 }
 
+/**
+ * 5. 텍스트 비주얼 필터
+ */
 html[data-friction-text-active="1"] [data-friction-text-visual] {
   transition: filter 0.15s ease, text-shadow 0.15s ease, opacity 0.15s ease;
 }
@@ -47,25 +117,15 @@ html[data-friction-text-opacity="1"] [data-friction-text-visual] {
   opacity: var(--f-text-opacity) !important;
 }
 
-html[data-friction-hover-reveal="1"][data-friction-text-blur="1"] [data-friction-text-visual]:hover,
-html[data-friction-hover-reveal="1"][data-friction-text-blur="1"] [data-friction-text-visual]:has(:hover) {
-  filter: blur(0px) !important;
-}
-
-html[data-friction-hover-reveal="1"][data-friction-text-shadow="1"] [data-friction-text-visual]:hover,
-html[data-friction-hover-reveal="1"][data-friction-text-shadow="1"] [data-friction-text-visual]:has(:hover) {
-  text-shadow: none !important;
-}
-
-html[data-friction-hover-reveal="1"][data-friction-text-opacity="1"] [data-friction-text-visual]:hover,
-html[data-friction-hover-reveal="1"][data-friction-text-opacity="1"] [data-friction-text-visual]:has(:hover) {
-  opacity: 1 !important;
-}
-
+/* 텍스트 호버 리빌 */
+/**
+ * 6. 기타 특수 기능
+ */
 html[data-friction-text-shuffle-pending="1"] [data-friction-text-visual] {
   visibility: hidden !important;
 }
 
+/* 입력창 지연 효과 */
 html[data-friction-input-delay-active="1"] [data-friction-input-delay="1"] {
   color: transparent !important;
   -webkit-text-fill-color: transparent !important;
@@ -78,6 +138,13 @@ html[data-friction-input-delay-active="1"] [data-friction-input-delay="1"]::plac
   -webkit-text-fill-color: var(--friction-placeholder-color, rgba(0, 0, 0, 0.45)) !important;
 }
 
+/* 소셜 지표 숨기기 */
+html[data-friction-social-metrics="1"] [data-friction-social-engagement="1"],
+html[data-friction-social-metrics="1"] [data-friction-social-exposure="1"] {
+  display: none !important;
+}
+
+/* 입력창 오버레이 스타일 */
 .friction-input-overlay {
   position: fixed;
   pointer-events: none;
@@ -104,12 +171,4 @@ html[data-friction-input-delay-active="1"] [data-friction-input-delay="1"]::plac
   word-break: break-word;
   transform: translate3d(0, 0, 0);
   will-change: transform;
-}
-
-html[data-friction-social-metrics="1"] [data-friction-social-engagement="1"] {
-  display: none !important;
-}
-
-html[data-friction-social-metrics="1"] [data-friction-social-exposure="1"] {
-  display: none !important;
 }

@@ -1,5 +1,3 @@
-import { ROOT_ATTRS } from './constants.js';
-import { setRootAttribute, removeRootAttribute } from './dom.js';
 import VisualManager from './visualManager.js';
 import SocialMetricsManager from './socialMetricsManager.js';
 import DelayManager from './delayManager.js';
@@ -9,6 +7,7 @@ import InputDelayManager from './inputDelayManager.js';
 import InteractionManager from './interactionManager.js';
 import NudgeGame from './nudgeGame.js';
 import AnxietySensor from './anxietySensor.js';
+import VideoSkipManager from './videoSkipManager.js';
 
 function clearAllFriction() {
   VisualManager.remove();
@@ -19,7 +18,7 @@ function clearAllFriction() {
   InputDelayManager.remove();
   InteractionManager.removeClickDelay();
   InteractionManager.removeScroll();
-  removeRootAttribute(ROOT_ATTRS.HOVER_REVEAL);
+  VideoSkipManager.remove();
   if (NudgeGame.isActive() && NudgeGame.getMode() !== 'debug') {
     NudgeGame.stop();
   }
@@ -61,11 +60,6 @@ export function initFrictionController() {
     if (!request || !request.filters) return;
     const { filters } = request;
 
-    const hoverRevealSetting = filters.hoverReveal;
-    const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
-    if (hoverRevealEnabled) setRootAttribute(ROOT_ATTRS.HOVER_REVEAL, '1');
-    else removeRootAttribute(ROOT_ATTRS.HOVER_REVEAL);
-
     VisualManager.update(filters);
     SocialMetricsManager.update(filters.socialEngagement, filters.socialExposure);
 
@@ -81,8 +75,11 @@ export function initFrictionController() {
     if (filters.scrollFriction?.isActive) InteractionManager.applyScroll(filters.scrollFriction.value);
     else InteractionManager.removeScroll();
 
+    if (filters.videoSkipGuard?.isActive) VideoSkipManager.apply();
+    else VideoSkipManager.remove();
+
     TextManager.update(filters);
-    TextShuffleManager.update(filters.textShuffle, { hoverRevealEnabled });
+    TextShuffleManager.update(filters.textShuffle);
     sendResponse?.({ ok: true });
     return false;
   });
