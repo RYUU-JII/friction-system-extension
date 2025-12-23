@@ -85,6 +85,8 @@ const VideoSkipManager = {
     this._removeIndicator();
   },
 
+  _pointerBlockHandler: null,
+
   _installFullscreenTracking() {
     if (this._boundOnFullscreenChange) return;
     this._boundOnFullscreenChange = () => {
@@ -92,12 +94,22 @@ const VideoSkipManager = {
       this._trySetActiveFromFullscreen();
     };
     document.addEventListener('fullscreenchange', this._boundOnFullscreenChange, true);
+    this._pointerBlockHandler = (e) => {
+      this._blockPointerDuringRevert(e);
+    };
+    document.addEventListener('pointerdown', this._pointerBlockHandler, true);
+    document.addEventListener('click', this._pointerBlockHandler, true);
   },
 
   _teardownFullscreenTracking() {
     if (!this._boundOnFullscreenChange) return;
     document.removeEventListener('fullscreenchange', this._boundOnFullscreenChange, true);
     this._boundOnFullscreenChange = null;
+    if (this._pointerBlockHandler) {
+      document.removeEventListener('pointerdown', this._pointerBlockHandler, true);
+      document.removeEventListener('click', this._pointerBlockHandler, true);
+      this._pointerBlockHandler = null;
+    }
   },
 
   _installUserGestureTracking() {
@@ -422,26 +434,41 @@ const VideoSkipManager = {
       isFinitePositive(video.duration) ? video.duration : Number.MAX_SAFE_INTEGER
     );
     st.revertTargetTime = target;
-    try {
-      video.currentTime = target;
-    } catch (_) {}
+    const schedule = typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame
+      : (cb) => window.setTimeout(cb, 0);
+    schedule(() => {
+      try {
+        video.currentTime = target;
+      } catch (_) {}
+    });
 
     st.revertTimeoutId = window.setTimeout(() => {
       st.reverting = false;
       st.revertTimeoutId = null;
 
       const finalTarget = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : target;
-      try {
-        video.currentTime = finalTarget;
-      } catch (_) {}
-
       st.lastStableTime = finalTarget;
       st.lastChargeTime = finalTarget;
       st.revertTargetTime = null;
       try {
         delete video.dataset.frictionSkipReverting;
       } catch (_) {}
-    }, 450);
+    }, 300);
+  },
+
+  _blockPointerDuringRevert(e) {
+    if (!this._active) return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    const video = target.closest('video');
+    if (!video) return;
+    if (video.dataset.frictionSkipReverting !== '1') return;
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    } catch (_) {}
   },
 
   _applyPlaybackRate(video, rate) {
