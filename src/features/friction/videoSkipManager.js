@@ -17,6 +17,13 @@ const CONFIG = {
   indicatorPulseMs: 2200,
   speedModeMinIntervalMs: 2500,
   speedModeAutoHideMs: 6500,
+  indicatorInlineMinWidth: 420,
+  indicatorInlineMinHeight: 240,
+  indicatorInlineInsetPx: 14,
+
+  // Storage
+  storageKey: 'friction:videoSkipPool:v1',
+  storageWriteThrottleMs: 1000,
 };
 
 function clamp(n, min, max) {
@@ -50,6 +57,16 @@ const VideoSkipManager = {
   _boundOnFullscreenChange: null,
 
   _activeVideo: null,
+  _pool: null,
+  _poolPersistTimer: null,
+  _lastPoolPersistAt: 0,
+  _storageBackend: undefined,
+  _storageChangeSource: null,
+  _boundOnStorage: null,
+  _boundOnVisibilityChange: null,
+  _boundOnPageHide: null,
+  _boundOnViewportChange: null,
+  _positionRafId: null,
 
   _indicatorRoot: null,
   _indicatorShadow: null,
@@ -69,6 +86,10 @@ const VideoSkipManager = {
     if (this._active) return;
     this._active = true;
 
+    this._ensurePool();
+    this._restorePoolFromStorage();
+    this._installStorageSync();
+    this._installViewportTracking();
     this._installFullscreenTracking();
     this._installUserGestureTracking();
     this._scanExistingVideos();
@@ -78,6 +99,11 @@ const VideoSkipManager = {
   remove() {
     this._active = false;
     this._activeVideo = null;
+    if (this._pool) this._persistPool({ immediate: true });
+    this._pool = null;
+    this._clearPoolPersistTimer();
+    this._teardownStorageSync();
+    this._teardownViewportTracking();
     this._teardownObserver();
     this._teardownFullscreenTracking();
     this._teardownUserGestureTracking();
@@ -92,6 +118,7 @@ const VideoSkipManager = {
     this._boundOnFullscreenChange = () => {
       this._mountPortals();
       this._trySetActiveFromFullscreen();
+      this._scheduleIndicatorPositionUpdate();
     };
     document.addEventListener('fullscreenchange', this._boundOnFullscreenChange, true);
     this._pointerBlockHandler = (e) => {
@@ -186,12 +213,343 @@ const VideoSkipManager = {
     document.querySelectorAll('video').forEach((v) => this._attachVideo(v));
   },
 
+  _ensurePool() {
+    if (!this._pool) {
+      this._pool = {
+        availableSkips: CONFIG.maxSkips,
+        accumulatedTimeSec: 0,
+        cooldownUntil: 0,
+        updatedAt: 0,
+      };
+    }
+    return this._pool;
+  },
+
+  _getStorageBackend() {
+    if (this._storageBackend !== undefined) return this._storageBackend;
+    const root = typeof globalThis !== 'undefined' ? globalThis : window;
+    const chromeLocal = root?.chrome?.storage?.local;
+    const browserLocal = root?.browser?.storage?.local;
+    this._storageBackend = chromeLocal || browserLocal || null;
+    return this._storageBackend;
+  },
+
+  _parseStorageValue(value) {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (typeof value === 'object') return value;
+    return null;
+  },
+
+  _storageGet(key) {
+    const storage = this._getStorageBackend();
+    if (storage && typeof storage.get === 'function') {
+      if (storage.get.length >= 2) {
+        return new Promise((resolve) => {
+          try {
+            storage.get(key, (items) => {
+              if (globalThis?.chrome?.runtime?.lastError) {
+                resolve(null);
+                return;
+              }
+              resolve(items?.[key]);
+            });
+          } catch (_) {
+            resolve(null);
+          }
+        });
+      }
+      try {
+        const result = storage.get(key);
+        if (result && typeof result.then === 'function') {
+          return result.then((items) => items?.[key]).catch(() => null);
+        }
+      } catch (_) {
+        return Promise.resolve(null);
+      }
+    }
+    try {
+      const raw = window.localStorage?.getItem(key);
+      return Promise.resolve(this._parseStorageValue(raw));
+    } catch (_) {
+      return Promise.resolve(null);
+    }
+  },
+
+  _storageSet(key, value) {
+    const storage = this._getStorageBackend();
+    if (storage && typeof storage.set === 'function') {
+      if (storage.set.length >= 2) {
+        return new Promise((resolve) => {
+          try {
+            storage.set({ [key]: value }, () => resolve());
+          } catch (_) {
+            resolve();
+          }
+        });
+      }
+      try {
+        const result = storage.set({ [key]: value });
+        if (result && typeof result.then === 'function') return result.catch(() => {});
+      } catch (_) {
+        return Promise.resolve();
+      }
+    }
+    try {
+      window.localStorage?.setItem(key, JSON.stringify(value));
+    } catch (_) {}
+    return Promise.resolve();
+  },
+
+  _serializePool() {
+    const pool = this._ensurePool();
+    return {
+      availableSkips: clamp(pool.availableSkips, 0, CONFIG.maxSkips),
+      accumulatedTimeSec: Math.max(0, Number(pool.accumulatedTimeSec) || 0),
+      cooldownUntil: Math.max(0, Number(pool.cooldownUntil) || 0),
+      updatedAt: Number(pool.updatedAt) || Date.now(),
+    };
+  },
+
+  _applyPoolSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return false;
+    const updatedAt = Number(snapshot.updatedAt) || 0;
+    const pool = this._ensurePool();
+    if (updatedAt && updatedAt < (Number(pool.updatedAt) || 0)) return false;
+    const nextAvailable = Number(snapshot.availableSkips);
+    if (Number.isFinite(nextAvailable)) {
+      pool.availableSkips = clamp(nextAvailable, 0, CONFIG.maxSkips);
+    }
+    const nextAccumulated = Number(snapshot.accumulatedTimeSec);
+    if (Number.isFinite(nextAccumulated)) {
+      pool.accumulatedTimeSec = Math.max(0, nextAccumulated);
+    }
+    const nextCooldown = Number(snapshot.cooldownUntil);
+    if (Number.isFinite(nextCooldown)) {
+      pool.cooldownUntil = Math.max(0, nextCooldown);
+    }
+    pool.updatedAt = updatedAt || Date.now();
+    return true;
+  },
+
+  async _restorePoolFromStorage() {
+    if (typeof window === 'undefined') return;
+    const stored = await this._storageGet(CONFIG.storageKey);
+    const parsed = this._parseStorageValue(stored) || stored;
+    if (!parsed) return;
+    if (this._applyPoolSnapshot(parsed)) {
+      const v = this._activeVideo;
+      if (v && v instanceof HTMLVideoElement) this._updateIndicator(this._getState(v));
+    }
+  },
+
+  _persistPool({ immediate } = {}) {
+    if (typeof window === 'undefined') return;
+    const now = Date.now();
+    const throttleMs = CONFIG.storageWriteThrottleMs;
+    if (!immediate && now - this._lastPoolPersistAt < throttleMs) {
+      if (this._poolPersistTimer) return;
+      const delay = Math.max(0, throttleMs - (now - this._lastPoolPersistAt));
+      this._poolPersistTimer = window.setTimeout(() => {
+        this._poolPersistTimer = null;
+        this._persistPool({ immediate: true });
+      }, delay);
+      return;
+    }
+
+    if (this._poolPersistTimer) {
+      try {
+        window.clearTimeout(this._poolPersistTimer);
+      } catch (_) {}
+      this._poolPersistTimer = null;
+    }
+
+    const snapshot = this._serializePool();
+    const pool = this._ensurePool();
+    pool.updatedAt = snapshot.updatedAt;
+    this._lastPoolPersistAt = now;
+    this._storageSet(CONFIG.storageKey, snapshot);
+  },
+
+  _clearPoolPersistTimer() {
+    if (!this._poolPersistTimer) return;
+    try {
+      window.clearTimeout(this._poolPersistTimer);
+    } catch (_) {}
+    this._poolPersistTimer = null;
+  },
+
+  _touchPool({ immediate } = {}) {
+    const pool = this._ensurePool();
+    pool.updatedAt = Date.now();
+    this._persistPool({ immediate });
+  },
+
+  _installStorageSync() {
+    if (this._boundOnStorage) return;
+    const root = typeof globalThis !== 'undefined' ? globalThis : window;
+    const storageEvents = root?.chrome?.storage?.onChanged || root?.browser?.storage?.onChanged;
+    if (storageEvents && typeof storageEvents.addListener === 'function') {
+      this._storageChangeSource = storageEvents;
+      this._boundOnStorage = (changes, areaName) => {
+        if (areaName && areaName !== 'local') return;
+        const change = changes?.[CONFIG.storageKey];
+        if (!change || change.newValue == null) return;
+        const parsed = this._parseStorageValue(change.newValue) || change.newValue;
+        if (this._applyPoolSnapshot(parsed)) {
+          const v = this._activeVideo;
+          if (v && v instanceof HTMLVideoElement) this._updateIndicator(this._getState(v));
+        }
+      };
+      storageEvents.addListener(this._boundOnStorage);
+    } else {
+      this._boundOnStorage = (e) => {
+        if (!e || e.key !== CONFIG.storageKey) return;
+        if (!e.newValue) return;
+        const parsed = this._parseStorageValue(e.newValue);
+        if (!parsed) return;
+        if (this._applyPoolSnapshot(parsed)) {
+          const v = this._activeVideo;
+          if (v && v instanceof HTMLVideoElement) this._updateIndicator(this._getState(v));
+        }
+      };
+      window.addEventListener('storage', this._boundOnStorage);
+    }
+
+    this._boundOnVisibilityChange = () => {
+      if (!this._active) return;
+      if (document.visibilityState === 'hidden') this._persistPool({ immediate: true });
+    };
+    document.addEventListener('visibilitychange', this._boundOnVisibilityChange);
+
+    this._boundOnPageHide = () => {
+      if (!this._active) return;
+      this._persistPool({ immediate: true });
+    };
+    window.addEventListener('pagehide', this._boundOnPageHide);
+  },
+
+  _teardownStorageSync() {
+    if (this._boundOnStorage) {
+      if (this._storageChangeSource?.removeListener) {
+        this._storageChangeSource.removeListener(this._boundOnStorage);
+      } else {
+        window.removeEventListener('storage', this._boundOnStorage);
+      }
+      this._boundOnStorage = null;
+      this._storageChangeSource = null;
+    }
+    if (this._boundOnVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._boundOnVisibilityChange);
+      this._boundOnVisibilityChange = null;
+    }
+    if (this._boundOnPageHide) {
+      window.removeEventListener('pagehide', this._boundOnPageHide);
+      this._boundOnPageHide = null;
+    }
+  },
+
+  _installViewportTracking() {
+    if (this._boundOnViewportChange) return;
+    this._boundOnViewportChange = () => {
+      this._scheduleIndicatorPositionUpdate();
+    };
+    window.addEventListener('resize', this._boundOnViewportChange, true);
+    window.addEventListener('scroll', this._boundOnViewportChange, true);
+  },
+
+  _teardownViewportTracking() {
+    if (!this._boundOnViewportChange) return;
+    window.removeEventListener('resize', this._boundOnViewportChange, true);
+    window.removeEventListener('scroll', this._boundOnViewportChange, true);
+    this._boundOnViewportChange = null;
+    if (this._positionRafId) {
+      try {
+        window.cancelAnimationFrame(this._positionRafId);
+      } catch (_) {}
+      this._positionRafId = null;
+    }
+  },
+
+  _scheduleIndicatorPositionUpdate() {
+    if (!this._indicatorRoot) return;
+    if (this._positionRafId) return;
+    this._positionRafId = window.requestAnimationFrame(() => {
+      this._positionRafId = null;
+      this._updateIndicatorPosition();
+    });
+  },
+
+  _updateIndicatorPosition() {
+    const root = this._indicatorRoot;
+    if (!root) return;
+    const inset = CONFIG.indicatorInlineInsetPx;
+    const video = this._activeVideo;
+    if (!video || !(video instanceof HTMLVideoElement)) {
+      root.style.top = `${inset}px`;
+      root.style.right = `${inset}px`;
+      root.style.left = 'auto';
+      root.style.bottom = 'auto';
+      return;
+    }
+
+    const rect = video.getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || rect.width <= 0 || rect.height <= 0) {
+      root.style.top = `${inset}px`;
+      root.style.right = `${inset}px`;
+      root.style.left = 'auto';
+      root.style.bottom = 'auto';
+      return;
+    }
+
+    const isInline =
+      rect.width >= CONFIG.indicatorInlineMinWidth && rect.height >= CONFIG.indicatorInlineMinHeight;
+
+    if (!isInline) {
+      root.style.top = `${inset}px`;
+      root.style.right = `${inset}px`;
+      root.style.left = 'auto';
+      root.style.bottom = 'auto';
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect();
+    const width = rootRect.width || 0;
+    const height = rootRect.height || 0;
+
+    let left = rect.right - inset - width;
+    let top = rect.top + inset;
+
+    const minLeft = inset;
+    const maxLeft = Math.max(minLeft, window.innerWidth - width - inset);
+    const minTop = inset;
+    const maxTop = Math.max(minTop, window.innerHeight - height - inset);
+
+    left = clamp(left, minLeft, maxLeft);
+    top = clamp(top, minTop, maxTop);
+
+    root.style.left = `${Math.round(left)}px`;
+    root.style.top = `${Math.round(top)}px`;
+    root.style.right = 'auto';
+    root.style.bottom = 'auto';
+  },
+
   _setActiveVideo(video) {
     if (!video || !(video instanceof HTMLVideoElement)) return;
     this._activeVideo = video;
+    this._ensurePool();
     const st = this._getState(video);
+    st.lastChargeTime = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
     this._ensureIndicator();
     this._updateIndicator(st);
+    this._setIndicatorVisibility(!video.paused && !video.ended);
+    this._scheduleIndicatorPositionUpdate();
   },
 
   _getState(video) {
@@ -201,9 +559,6 @@ const VideoSkipManager = {
     st = {
       lastStableTime: t,
       lastChargeTime: t,
-      availableSkips: CONFIG.maxSkips,
-      accumulatedTimeSec: 0,
-      cooldownUntil: 0,
       lastSrc: String(video.currentSrc || video.src || ''),
       revertTargetTime: null,
       revertTimeoutId: null,
@@ -218,9 +573,6 @@ const VideoSkipManager = {
     const src = String(video.currentSrc || video.src || '');
     if (src && st.lastSrc !== src) {
       st.lastSrc = src;
-      st.availableSkips = CONFIG.maxSkips;
-      st.accumulatedTimeSec = 0;
-      st.cooldownUntil = 0;
       const t = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
       st.lastStableTime = t;
       st.lastChargeTime = t;
@@ -241,14 +593,34 @@ const VideoSkipManager = {
     const onTimeUpdate = () => {
       if (!this._active || st.reverting || video.seeking) return;
 
+      const pool = this._ensurePool();
       const current = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
       const deltaStable = current - (Number(st.lastStableTime) || 0);
       st.lastStableTime = current;
 
-      if (video.paused) {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) {
         st.lastChargeTime = current;
-        if (this._activeVideo === video) this._updateIndicator(st);
+        if (this._activeVideo === video) this._setIndicatorVisibility(false);
         return;
+      }
+
+      if (this._activeVideo && this._activeVideo !== video) {
+        st.lastChargeTime = current;
+        return;
+      }
+
+      if (video.paused || video.ended) {
+        st.lastChargeTime = current;
+        if (this._activeVideo === video) {
+          this._setIndicatorVisibility(false);
+          this._updateIndicator(st);
+        }
+        return;
+      }
+
+      if (this._activeVideo === video) {
+        this._setIndicatorVisibility(true);
+        this._scheduleIndicatorPositionUpdate();
       }
 
       const deltaCharge = current - (Number(st.lastChargeTime) || current);
@@ -261,19 +633,29 @@ const VideoSkipManager = {
 
       this._syncIdentity(video, st);
 
-      if (st.availableSkips >= CONFIG.maxSkips) {
-        st.accumulatedTimeSec = 0;
+      const beforeSkips = pool.availableSkips;
+      const beforeAccum = pool.accumulatedTimeSec;
+
+      if (pool.availableSkips >= CONFIG.maxSkips) {
+        if (pool.accumulatedTimeSec !== 0) {
+          pool.accumulatedTimeSec = 0;
+          this._touchPool({ immediate: false });
+        }
         if (this._activeVideo === video) this._updateIndicator(st);
         return;
       }
 
       if (deltaStable > 0 && deltaStable <= CONFIG.maxChargeDeltaSec) {
-        st.accumulatedTimeSec += deltaCharge;
-        while (st.accumulatedTimeSec >= CONFIG.secondsPerSkip && st.availableSkips < CONFIG.maxSkips) {
-          st.availableSkips += 1;
-          st.accumulatedTimeSec -= CONFIG.secondsPerSkip;
+        pool.accumulatedTimeSec += deltaCharge;
+        while (pool.accumulatedTimeSec >= CONFIG.secondsPerSkip && pool.availableSkips < CONFIG.maxSkips) {
+          pool.availableSkips += 1;
+          pool.accumulatedTimeSec -= CONFIG.secondsPerSkip;
         }
-        if (st.availableSkips >= CONFIG.maxSkips) st.accumulatedTimeSec = 0;
+        if (pool.availableSkips >= CONFIG.maxSkips) pool.accumulatedTimeSec = 0;
+      }
+
+      if (pool.availableSkips !== beforeSkips || pool.accumulatedTimeSec !== beforeAccum) {
+        this._touchPool({ immediate: false });
       }
 
       if (this._activeVideo === video) this._updateIndicator(st);
@@ -283,6 +665,7 @@ const VideoSkipManager = {
       if (!this._active) return;
 
       this._setActiveVideo(video);
+      const pool = this._ensurePool();
 
       const from = Number(
         st.reverting && Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : st.lastStableTime
@@ -302,7 +685,7 @@ const VideoSkipManager = {
 
         // If user keeps trying to skip without credits, keep the speed suggestion visible.
         if (delta > CONFIG.minForwardJumpSec && this._isUserGestureRecent()) {
-          const available = Math.max(0, Math.floor(st.availableSkips || 0));
+          const available = Math.max(0, Math.floor(pool.availableSkips || 0));
           if (available <= 0) {
             this._setIndicatorMode('speed', { autoReturnMs: CONFIG.speedModeAutoHideMs, reason: 'forced' });
             this._pulseIndicator();
@@ -326,12 +709,13 @@ const VideoSkipManager = {
       this._syncIdentity(video, st);
 
       const now = Date.now();
-      const cooldownLeftMs = Math.max(0, (st.cooldownUntil || 0) - now);
-      const canUse = cooldownLeftMs <= 0 && st.availableSkips > 0;
+      const cooldownLeftMs = Math.max(0, (pool.cooldownUntil || 0) - now);
+      const canUse = cooldownLeftMs <= 0 && pool.availableSkips > 0;
 
       if (canUse) {
-        st.availableSkips -= 1;
-        st.cooldownUntil = now + CONFIG.cooldownMs;
+        pool.availableSkips -= 1;
+        pool.cooldownUntil = now + CONFIG.cooldownMs;
+        this._touchPool({ immediate: true });
         const t = clamp(to, 0, Number.MAX_SAFE_INTEGER);
         st.lastStableTime = t;
         st.lastChargeTime = t;
@@ -346,7 +730,10 @@ const VideoSkipManager = {
     const onLoadedMetadata = () => {
       if (!this._active) return;
       this._syncIdentity(video, st);
-      if (this._activeVideo === video) this._updateIndicator(st);
+      if (this._activeVideo === video) {
+        this._updateIndicator(st);
+        this._scheduleIndicatorPositionUpdate();
+      }
     };
 
     const onPointerEnter = () => {
@@ -365,12 +752,37 @@ const VideoSkipManager = {
       this._updateIndicator(st);
     };
 
-    st.handlers = { onTimeUpdate, onSeeking, onLoadedMetadata, onPointerEnter, onPlay, onRateChange };
+    const onPause = () => {
+      if (!this._active) return;
+      if (this._activeVideo !== video) return;
+      this._setIndicatorVisibility(false);
+      this._updateIndicator(st);
+    };
+
+    const onEnded = () => {
+      if (!this._active) return;
+      if (this._activeVideo !== video) return;
+      this._setIndicatorVisibility(false);
+      this._updateIndicator(st);
+    };
+
+    st.handlers = {
+      onTimeUpdate,
+      onSeeking,
+      onLoadedMetadata,
+      onPointerEnter,
+      onPlay,
+      onPause,
+      onEnded,
+      onRateChange,
+    };
     video.addEventListener('timeupdate', onTimeUpdate, true);
     video.addEventListener('seeking', onSeeking, true);
     video.addEventListener('loadedmetadata', onLoadedMetadata, true);
     video.addEventListener('pointerenter', onPointerEnter, true);
     video.addEventListener('play', onPlay, true);
+    video.addEventListener('pause', onPause, true);
+    video.addEventListener('ended', onEnded, true);
     video.addEventListener('ratechange', onRateChange, true);
 
     this._videos.add(video);
@@ -391,6 +803,8 @@ const VideoSkipManager = {
         video.removeEventListener('loadedmetadata', handlers.onLoadedMetadata, true);
         video.removeEventListener('pointerenter', handlers.onPointerEnter, true);
         video.removeEventListener('play', handlers.onPlay, true);
+        video.removeEventListener('pause', handlers.onPause, true);
+        video.removeEventListener('ended', handlers.onEnded, true);
         video.removeEventListener('ratechange', handlers.onRateChange, true);
       } catch (_) {}
       if (st) st.handlers = null;
@@ -401,7 +815,8 @@ const VideoSkipManager = {
   _blockForwardSeek(video, st, info) {
     const now = Date.now();
 
-    const available = Math.max(0, Math.floor(st.availableSkips || 0));
+    const pool = this._ensurePool();
+    const available = Math.max(0, Math.floor(pool.availableSkips || 0));
     if (available <= 0) this._lastSpeedModeTs = now;
 
     this._revert(video, st, info.from);
@@ -530,6 +945,16 @@ const VideoSkipManager = {
         if (!this._indicatorHovering) this._setIndicatorMode('gauge');
       }, autoReturnMs);
     }
+
+    this._scheduleIndicatorPositionUpdate();
+  },
+
+  _setIndicatorVisibility(isVisible) {
+    this._ensureIndicator();
+    const capsule = this._indicatorEls?.capsule;
+    if (!capsule) return;
+    capsule.classList.toggle('is-hidden', !isVisible);
+    capsule.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
   },
 
   _ensureIndicator() {
@@ -539,8 +964,8 @@ const VideoSkipManager = {
     root.id = 'friction-video-skip-indicator';
     root.className = 'theme-nordic-dark';
     root.style.position = 'fixed';
-    root.style.right = '14px';
-    root.style.top = '14px';
+    root.style.right = `${CONFIG.indicatorInlineInsetPx}px`;
+    root.style.top = `${CONFIG.indicatorInlineInsetPx}px`;
     root.style.zIndex = '2147483647';
     root.style.pointerEvents = 'none';
 
@@ -581,6 +1006,12 @@ const VideoSkipManager = {
         .capsule:hover,
         .capsule.is-active {
           opacity: 1;
+        }
+
+        .capsule.is-hidden {
+          opacity: 0;
+          pointer-events: none;
+          transform: translateY(-6px);
         }
 
         .capsule.is-empty .dot.is-filled {
@@ -831,6 +1262,7 @@ const VideoSkipManager = {
     (mount || document.documentElement || document.body)?.appendChild(root);
     this._mountPortals();
     this._setIndicatorMode('gauge');
+    this._scheduleIndicatorPositionUpdate();
   },
 
   _updateIndicator(st) {
@@ -839,15 +1271,16 @@ const VideoSkipManager = {
     const els = this._indicatorEls;
     if (!els) return;
 
-    const available = Math.max(0, Math.min(CONFIG.maxSkips, Math.floor(st.availableSkips || 0)));
+    const pool = this._ensurePool();
+    const available = Math.max(0, Math.min(CONFIG.maxSkips, Math.floor(pool.availableSkips || 0)));
     const progress =
       available >= CONFIG.maxSkips
         ? 1
-        : clamp((Number(st.accumulatedTimeSec) || 0) / CONFIG.secondsPerSkip, 0, 1);
-    const cooldownLeft = Math.max(0, Math.ceil(((st.cooldownUntil || 0) - Date.now()) / 1000));
+        : clamp((Number(pool.accumulatedTimeSec) || 0) / CONFIG.secondsPerSkip, 0, 1);
+    const cooldownLeft = Math.max(0, Math.ceil(((pool.cooldownUntil || 0) - Date.now()) / 1000));
     const untilNextSec =
       available < CONFIG.maxSkips
-        ? Math.max(0, Math.ceil(CONFIG.secondsPerSkip - (Number(st.accumulatedTimeSec) || 0)))
+        ? Math.max(0, Math.ceil(CONFIG.secondsPerSkip - (Number(pool.accumulatedTimeSec) || 0)))
         : 0;
 
     const last = this._indicatorLast || {};
@@ -931,6 +1364,12 @@ const VideoSkipManager = {
     this._indicatorModeTimer = null;
     if (this._indicatorHoverOutTimer) window.clearTimeout(this._indicatorHoverOutTimer);
     this._indicatorHoverOutTimer = null;
+    if (this._positionRafId) {
+      try {
+        window.cancelAnimationFrame(this._positionRafId);
+      } catch (_) {}
+      this._positionRafId = null;
+    }
 
     this._indicatorModeToken++;
     this._indicatorMode = 'gauge';
