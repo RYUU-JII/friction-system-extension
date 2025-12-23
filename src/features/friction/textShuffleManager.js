@@ -11,11 +11,6 @@ const TextShuffleManager = {
   touchedNodes: new Set(),
   originalTextByNode: new WeakMap(),
   shuffledTextByNode: new WeakMap(),
-  hoverActiveRoot: null,
-  hoverActiveNodes: new Set(),
-  hoverPreviewEnabled: true,
-  boundPointerOver: null,
-  boundPointerOut: null,
   observerUnsub: null,
   targetObserverUnsub: null,
   debounceTimer: null,
@@ -23,11 +18,10 @@ const TextShuffleManager = {
   pendingTextNodes: new Set(),
   initialPassDone: false,
 
-  update(setting, options = {}) {
+  update(setting) {
     const enabled = !!setting?.isActive;
     const strength = typeof setting?.value === 'number' ? setting.value : Number(setting?.value);
     const normalizedStrength = Number.isFinite(strength) ? Math.max(0, Math.min(1, strength)) : 0;
-    const hoverRevealEnabled = options.hoverRevealEnabled !== undefined ? !!options.hoverRevealEnabled : true;
 
     if (!enabled || normalizedStrength <= 0) {
       this.disable();
@@ -39,7 +33,6 @@ const TextShuffleManager = {
     this.ensureTargetMarkers();
     this.maybeShieldInitialPaint();
     this.applyAll();
-    this.setHoverPreviewEnabled(hoverRevealEnabled);
     this.ensureObserver();
     this.initialPassDone = true;
   },
@@ -48,12 +41,10 @@ const TextShuffleManager = {
     if (!this.enabled && this.touchedNodes.size === 0 && this.touchedElements.size === 0) return;
     this.enabled = false;
     this.strength = 0;
-    this.hoverPreviewEnabled = false;
     this.pendingSubtrees.clear();
     this.pendingTextNodes.clear();
     this.teardownObserver();
     this.removeInitialPaintShield();
-    this.disableHoverPreview();
     this.restoreAll();
     if (this.targetObserverUnsub) {
       this.targetObserverUnsub();
@@ -71,92 +62,6 @@ const TextShuffleManager = {
         overlayExemptSelector: selectors.overlayExempt,
       });
     }
-  },
-
-  setHoverPreviewEnabled(enabled) {
-    const nextEnabled = !!enabled;
-    if (this.hoverPreviewEnabled === nextEnabled) return;
-    this.hoverPreviewEnabled = nextEnabled;
-    if (nextEnabled && this.enabled) this.enableHoverPreview();
-    else this.disableHoverPreview();
-  },
-
-  enableHoverPreview() {
-    if (this.boundPointerOver || this.boundPointerOut) return;
-
-    this.boundPointerOver = (e) => {
-      if (!this.enabled) return;
-      const target = e?.target;
-      const targetEl =
-        target instanceof Element ? target : target && target.parentElement ? target.parentElement : null;
-      const root = targetEl ? targetEl.closest('[data-friction-shuffled="1"]') : null;
-
-      if (!root) {
-        this._clearHoverPreview();
-        return;
-      }
-
-      if (this.hoverActiveRoot === root) return;
-
-      this._clearHoverPreview();
-      this._applyHoverPreview(root);
-    };
-
-    this.boundPointerOut = (e) => {
-      if (!this.hoverActiveRoot) return;
-
-      const from = e?.target instanceof Node ? e.target : null;
-      if (!from || !this.hoverActiveRoot.contains(from)) return;
-
-      const to = e?.relatedTarget instanceof Node ? e.relatedTarget : null;
-      if (to && this.hoverActiveRoot.contains(to)) return;
-
-      this._clearHoverPreview();
-    };
-
-    document.addEventListener('pointerover', this.boundPointerOver, true);
-    document.addEventListener('pointerout', this.boundPointerOut, true);
-  },
-
-  disableHoverPreview() {
-    if (this.boundPointerOver) {
-      document.removeEventListener('pointerover', this.boundPointerOver, true);
-      this.boundPointerOver = null;
-    }
-    if (this.boundPointerOut) {
-      document.removeEventListener('pointerout', this.boundPointerOut, true);
-      this.boundPointerOut = null;
-    }
-    this._clearHoverPreview();
-  },
-
-  _applyHoverPreview(rootEl) {
-    if (!rootEl || !(rootEl instanceof Element)) return;
-
-    this.hoverActiveRoot = rootEl;
-    this.hoverActiveNodes.clear();
-
-    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
-    while (true) {
-      const node = walker.nextNode();
-      if (!node) break;
-      const original = this.originalTextByNode.get(node);
-      if (typeof original !== 'string') continue;
-      node.nodeValue = original;
-      this.hoverActiveNodes.add(node);
-    }
-  },
-
-  _clearHoverPreview() {
-    if (!this.hoverActiveRoot) return;
-    for (const node of Array.from(this.hoverActiveNodes)) {
-      if (!node || typeof node.nodeValue !== 'string') continue;
-      const shuffled = this.shuffledTextByNode.get(node);
-      if (typeof shuffled !== 'string') continue;
-      node.nodeValue = shuffled;
-    }
-    this.hoverActiveNodes.clear();
-    this.hoverActiveRoot = null;
   },
 
   restoreAll() {

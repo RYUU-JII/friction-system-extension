@@ -114,7 +114,6 @@ function initDOMReferences() {
   UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
   UI.previewBefore = document.getElementById('previewBefore');
   UI.previewAfter = document.getElementById('previewAfter');
-  UI.hoverRevealToggle = document.getElementById('hoverRevealToggle');
 
   UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
   UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');

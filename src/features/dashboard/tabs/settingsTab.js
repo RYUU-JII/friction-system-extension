@@ -36,6 +36,18 @@ const ADVANCED_TIER = 'advanced';
 const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
 
 const SETTING_METADATA_V2 = {
+  videoSkipGuard: {
+    label: '비디오 앞으로 스킵 제한',
+    control: 'toggle',
+    type: 'boolean',
+    unit: '',
+    unitSuffix: '',
+    storage: 'raw',
+    category: 'media',
+    tier: 'advanced',
+    order: 5,
+    helper: '앞으로 점프(seeking)를 쿨다운+길이기반 쿼터로 제한하고, 배속 CTA를 제공합니다. (세션 단위)',
+  },
   blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', tier: 'basic', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
   desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
   letterSpacing: { label: '글자 간격', control: 'range', type: 'number', unit: 'em', unitSuffix: 'em', storage: 'cssUnit', category: 'text', tier: 'basic', order: 10, placeholder: '0.1', min: '0', max: '0.5', step: '0.02' },
@@ -721,8 +733,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     const settings = getSettings();
     const token = ++settingsPreviewUpdateToken;
 
-    UI.settingsPreview.classList.toggle('is-hover-reveal-enabled', !!settings?.hoverReveal?.isActive);
-
     clearFrames();
 
     if (currentSettingsSubtab === 'media') {
@@ -788,7 +798,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       const after = document.createElement('div');
       after.className = 'preview-text';
 
-      const hoverRevealEnabled = !!settings?.hoverReveal?.isActive;
       const strength = getTextShuffleProbability(settings);
       const shuffled = strength > 0 ? seededShuffleWords(originalText, `friction-preview-${strength}`, strength) : originalText;
       after.textContent = shuffled;
@@ -800,15 +809,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       }
       if (settings?.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
       if (settings?.textBlur?.isActive) after.style.filter = `blur(${settings.textBlur.value})`;
-
-      if (hoverRevealEnabled && strength > 0) {
-        after.addEventListener('mouseenter', () => {
-          after.textContent = originalText;
-        });
-        after.addEventListener('mouseleave', () => {
-          after.textContent = shuffled;
-        });
-      }
 
       UI.previewBefore.appendChild(before);
       UI.previewAfter.appendChild(after);
@@ -896,24 +896,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
   function setup() {
     setupMediaPreviewHoverAudio();
-
-    if (UI.hoverRevealToggle) {
-      UI.hoverRevealToggle.addEventListener('change', () => {
-        const current = getSettings() || {};
-        const prev = current.hoverReveal && typeof current.hoverReveal === 'object' ? current.hoverReveal : null;
-        const next = {
-          ...current,
-          hoverReveal: {
-            isActive: !!UI.hoverRevealToggle.checked,
-            value: prev?.value ?? '',
-          },
-        };
-
-        setSettings(next);
-        updateSettingsPreviewV2();
-        persistCurrentSettings().catch(() => {});
-      });
-    }
 
     if (UI.settingsSubtabButtons) {
       UI.settingsSubtabButtons.forEach((btn) => {
@@ -1008,10 +990,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   async function display() {
     syncSettingsSubtabUI();
     applySettingsSubtabVisibility();
-
-    if (UI.hoverRevealToggle) {
-      UI.hoverRevealToggle.checked = !!getSettings()?.hoverReveal?.isActive;
-    }
 
     if (currentSettingsSubtab === 'game') {
       syncNudgeDebugOutputs();

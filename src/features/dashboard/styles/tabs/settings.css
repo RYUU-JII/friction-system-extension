@@ -113,20 +113,6 @@
     justify-content: space-between;
     margin-bottom: 12px;
 }
-.settings-preview-hover-toggle {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    justify-content: flex-end;
-    flex-shrink: 0;
-    font-size: 13px;
-    color: var(--text-muted);
-    user-select: none;
-}
-.settings-preview-hover-label {
-    white-space: nowrap;
-    font-weight: 700;
-}
 .settings-preview-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -193,13 +179,6 @@
     background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
     font-size: 15px;
     line-height: 1.5;
-}
-.settings-preview.is-hover-reveal-enabled #previewAfter .preview-media:hover .preview-image,
-.settings-preview.is-hover-reveal-enabled #previewAfter .preview-media:hover .preview-video,
-.settings-preview.is-hover-reveal-enabled #previewAfter .preview-text:hover {
-    filter: none !important;
-    text-shadow: none !important;
-    opacity: 1 !important;
 }
 body.dark .preview-text {
     background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.00));

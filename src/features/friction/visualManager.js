@@ -3,7 +3,6 @@ import { getSiteSelectors } from '../../shared/config/sites.js';
 import { ROOT_ATTRS, TARGET_ATTRS } from './constants.js';
 import { setRootAttribute, removeRootAttribute, setRootVar } from './dom.js';
 import { markExisting, subscribeToTargetChanges } from './targets.js';
-import HoverRevealManager from './hoverRevealManager.js';
 
 const VisualManager = {
   _videoHoverScopes: new Set(),
@@ -100,6 +99,13 @@ const VisualManager = {
         selector: selectors.visualTargets,
         attr: TARGET_ATTRS.VISUAL,
         overlayExemptSelector: selectors.overlayExempt,
+        // 옵션 추가: X의 background-image 주입을 감지하기 위해 attributes 설정
+        options: { 
+          childList: true, 
+          subtree: true, 
+          attributes: true, 
+          attributeFilter: ['style', 'src'] 
+        }
       });
     }
     if (!this._videoTargetObserverUnsub) {
@@ -107,6 +113,7 @@ const VisualManager = {
         selector: selectors.visualVideoTargets,
         attr: TARGET_ATTRS.VISUAL_VIDEO,
         overlayExemptSelector: selectors.overlayExempt,
+        options: { childList: true, subtree: true }
       });
     }
   },
@@ -114,9 +121,6 @@ const VisualManager = {
   update(filters) {
     const blur = filters.blur;
     const desat = filters.desaturation;
-    const hoverRevealSetting = filters.hoverReveal;
-    const hoverRevealEnabled = hoverRevealSetting ? !!hoverRevealSetting.isActive : true;
-
     const blurActive = !!(blur && blur.isActive);
     const desatActive = !!(desat && desat.isActive);
     const isActive = blurActive || desatActive;
@@ -141,17 +145,12 @@ const VisualManager = {
     }
     this._ensureTargetObservers(selectors);
 
-    const shouldTrackVideoHoverScopes = hoverRevealEnabled && (blurActive || desatActive);
-    if (shouldTrackVideoHoverScopes) this._ensureVideoContainerTracking({ trackHoverScopes: true });
-    else this._clearVideoContainers();
-
-    HoverRevealManager.update({ enabled: hoverRevealEnabled && (blurActive || desatActive) });
+    this._clearVideoContainers();
   },
 
   remove() {
     removeRootAttribute(ROOT_ATTRS.VISUAL);
     this._clearVideoContainers();
-    HoverRevealManager.update({ enabled: false });
     this._initialScanDone = false;
     if (this._targetObserverUnsub) {
       this._targetObserverUnsub();

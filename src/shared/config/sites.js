@@ -1,127 +1,75 @@
+/* src/shared/config/sites.js */
+
 const BASE_SELECTORS = {
-  visualTargets:
-    ':is(img, picture, canvas, svg, [role="img"], [data-testid="tweetPhoto"] [style*="background-image"], [style*="background-image"]:not(:has(img, video, canvas, svg)), #thumbnail img, [id="thumbnail"] img, .thumbnail img, .thumb img, [class*="thumbnail"] img, [class*="thumb"] img, ytd-thumbnail img, ytd-rich-grid-media img, ytd-compact-video-renderer img, ytd-reel-video-renderer img)',
+  // 1. 개별 타겟: 가장 기본적이고 가벼운 태그들 위주로 구성 (JS 부하 감소)
+  visualTargets: ':is(article, main, section, figure, [role="article"], [role="main"])',
   visualVideoTargets: 'video',
+
+  // 2. 인터랙티브 요소 (기존 유지)
   interactiveTargets:
-    ':is(a, button, article, [onclick], input[type="submit"], input[type="image"], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="article"], [role="menuitem"], [role="option"], [role="tab"], [class*="link"], [class*="button"], [class*="btn"], figure):not(.stickyunit)',
+    ':is(a, button, article, [onclick], input[type="submit"], [role="button"], [role="link"], [role="article"])',
+  
   textLayoutTargets: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])',
+  
   textVisualTargets:
-    ':is(span:not([role]), span[role="text"], a:not(:has(img, video, canvas, svg)), p:not(:has(img, video, canvas, svg)), li:not(:has(img, video, canvas, svg)), h1:not(:has(img, video, canvas, svg)), h2:not(:has(img, video, canvas, svg)), h3:not(:has(img, video, canvas, svg)), h4:not(:has(img, video, canvas, svg)), h5:not(:has(img, video, canvas, svg)), h6:not(:has(img, video, canvas, svg)), blockquote:not(:has(img, video, canvas, svg)))',
+    ':is(span:not([role]), span[role="text"], a:not(:has(img, video)), p:not(:has(img, video)), li:not(:has(img, video)))',
+  
   textTargets: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])',
+  
   overlayExempt: ':is([role="dialog"], [aria-modal="true"])',
+
   textShuffleExcludedClosest: [
-    'script',
-    'style',
-    'noscript',
-    'textarea',
-    'input',
-    'select',
-    'option',
-    'pre',
-    'code',
-    'svg',
-    'math',
-    '[contenteditable="true"]',
-    '[contenteditable=""]',
+    'script', 'style', 'noscript', 'textarea', 'input', 'select', 'option', 'pre', 'code', 'svg', 'math',
+    '[contenteditable="true"]', '[contenteditable=""]',
   ].join(', '),
-  hoverReveal: {
-    mediaStackImage: ':is(img, picture, canvas)',
-    mediaStackBackground: ':is([style*="background-image"])',
-    mediaStackRoleImg: ':is(svg, [role="img"])',
-    mediaStackFallback: 'img, picture, canvas, svg, video, [role="img"], [style*="background-image"]',
-    twitterPhotoScope: '[data-testid="tweetPhoto"]',
-    videoHoverScope: '[data-friction-video-hover-scope="1"]',
-  },
+
   interaction: {
     inputSubmit: 'input[type="submit"]',
     inputImage: 'input[type="image"]',
   },
-  instagram: {
-    postLink: 'a[href*="/p/"]',
-    gridMedia: 'img, video',
-    gridOverlayIcons:
-      'svg[aria-label*="좋아??], svg[aria-label*="?��?"], svg[aria-label*="like"], svg[aria-label*="comment"]',
-    buttonOrLink: 'button,[role="button"],a,[role="link"]',
-    deepLabel: 'svg[aria-label], span[aria-label]',
-    deepLabelScan:
-      'svg[aria-label], span[aria-label], [aria-label][role="img"], [aria-label][role="button"], [aria-label][role="link"], button[aria-label], a[aria-label]',
-    time: 'time[datetime]',
-  },
 };
 
+// YouTube 최적화: 썸네일 덩어리들을 타겟으로 잡아 하위 요소를 한꺼번에 제어
 const YOUTUBE_SELECTORS = {
-  hoverRevealScope: [
-    'ytd-rich-grid-media',
-    'ytd-rich-item-renderer',
-    'ytd-video-renderer',
-    'ytd-grid-video-renderer',
-    'ytd-compact-video-renderer',
-    'ytd-playlist-video-renderer',
-    'ytd-reel-video-renderer',
-    'ytd-reel-item-renderer',
-    'ytd-thumbnail',
-    '#thumbnail',
-    '[id="thumbnail"]',
-  ].join(', '),
+  visualTargets: ':is(ytd-thumbnail, #thumbnail, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-playlist-video-renderer, ytd-reel-item-renderer, ytd-reel-video-renderer, .ytp-videowall-still)',
   socialMetrics: {
     engagement: [
       '#vote-count-middle',
-      'ytd-comment-action-buttons-renderer #vote-count-middle',
-      'ytd-toggle-button-renderer #text',
-      'ytd-segmented-like-dislike-button-renderer #text',
       '.yt-spec-button-shape-next__button-text-content',
     ],
     exposure: [
-      'ytd-video-view-count-renderer span.style-scope.yt-formatted-string',
-      'ytd-watch-metadata #info-strings yt-formatted-string',
-      'ytd-watch-metadata #info-strings span.style-scope.yt-formatted-string',
+      'ytd-video-view-count-renderer span',
       'ytd-video-meta-block #metadata-line span',
-      'ytd-video-renderer #metadata-line span',
-      'ytd-compact-video-renderer #metadata-line span',
-      'ytd-rich-grid-media #metadata-line span',
-      'ytd-grid-video-renderer #metadata-line span',
-      'ytd-playlist-video-renderer #metadata-line span',
-      'span.yt-core-attributed-string.yt-content-metadata-view-model__metadata-text',
-      '.ytp-modern-videowall-still-view-count-and-date-info',
+      '.yt-core-attributed-string--link-inherit-color',
     ],
   },
 };
 
+// X(Twitter) 최적화: 트윗(article) 단위를 타겟으로 지정하여 자식 탐색 제거
 const X_SELECTORS = {
-  tweet: '[data-testid="tweet"]',
+  // 개별 이미지가 아니라 '트윗 덩어리'를 마킹합니다. 
+  // 이미지 로딩 전에도 부모는 존재하므로 딜레이가 사라집니다.
+  visualTargets: ':is(article, [data-testid="tweet"], [data-testid="tweetPhoto"])',
+  
   socialMetrics: {
     engagement: [
       '[data-testid="like"] span',
       '[data-testid="retweet"] span',
       '[data-testid="reply"] span',
-      '[data-testid="quoteTweet"] span',
-      '[data-testid="bookmark"] span',
     ],
     exposure: ['[data-testid="viewCount"] span', 'a[href*="/analytics"] span'],
   },
 };
 
 const INSTAGRAM_SELECTORS = {
+  // 인스타그램 포스트 전체를 타겟팅
+  visualTargets: ':is(article, section[role="dialog"], div[role="dialog"])',
   socialMetrics: {
     engagement: [
-      'span[role="button"][tabindex="0"]',
-      'article span[role="button"][tabindex="0"]',
-      'section[role="dialog"] span[role="button"][tabindex="0"]',
-      'div[role="dialog"] span[role="button"][tabindex="0"]',
       'a[href*="/liked_by/"] span',
       'a[href*="/likes/"] span',
-      'a[href*="/comments/"] span',
-      'header a[href*="/followers/"] span',
-      'header a[href*="/following/"] span',
     ],
-    exposure: [
-      'time[datetime]',
-      'article time[datetime]',
-      'section[role="dialog"] time[datetime]',
-      'div[role="dialog"] time[datetime]',
-      'a[href*="/reel/"] span',
-      'a[href*="/reels/"] span',
-    ],
+    exposure: ['time[datetime]'],
   },
 };
 
@@ -168,6 +116,6 @@ export function getSiteConfig(hostname) {
 
 export function getSiteSelectors(hostname) {
   const site = getSiteConfig(hostname);
+  // 사이트별 셀렉터가 있으면 BASE_SELECTORS를 덮어씁니다.
   return { ...BASE_SELECTORS, ...(site.selectors || {}) };
 }
-

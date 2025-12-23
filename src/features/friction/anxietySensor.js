@@ -30,7 +30,10 @@ const AnxietySensor = {
     document.addEventListener(
       'seeking',
       (e) => {
-        if (e.target.tagName === 'VIDEO') this.send('videoSkips');
+        if (e.target.tagName !== 'VIDEO') return;
+        const video = e.target;
+        if (video?.dataset?.frictionSkipReverting === '1') return;
+        this.send('videoSkips');
       },
       true
     );
