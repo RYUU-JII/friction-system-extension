@@ -56,6 +56,10 @@ const VideoSkipManager = {
   _indicatorEls: null,
   _indicatorPulseTimer: null,
   _indicatorModeTimer: null,
+  _indicatorHoverOutTimer: null,
+  _indicatorHoverOutToken: 0,
+  _indicatorHovering: false,
+  _indicatorForced: false,
   _indicatorModeToken: 0,
   _indicatorMode: 'gauge',
   _lastSpeedModeTs: 0,
@@ -189,6 +193,8 @@ const VideoSkipManager = {
       accumulatedTimeSec: 0,
       cooldownUntil: 0,
       lastSrc: String(video.currentSrc || video.src || ''),
+      revertTargetTime: null,
+      revertTimeoutId: null,
       reverting: false,
       handlers: null,
     };
@@ -262,14 +268,39 @@ const VideoSkipManager = {
     };
 
     const onSeeking = () => {
-      if (!this._active || st.reverting) return;
+      if (!this._active) return;
 
       this._setActiveVideo(video);
-      this._pulseIndicator();
 
-      const from = Number(st.lastStableTime) || 0;
+      const from = Number(
+        st.reverting && Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : st.lastStableTime
+      ) || 0;
       const to = Number(video.currentTime) || 0;
       const delta = to - from;
+
+      if (st.reverting) {
+        // Prevent rapid repeated seeks from "slipping through" while we are reverting.
+        // Always force the time back to the revert target.
+        const target = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : from;
+        if (Number.isFinite(target) && Math.abs((video.currentTime || 0) - target) > 0.05) {
+          try {
+            video.currentTime = target;
+          } catch (_) {}
+        }
+
+        // If user keeps trying to skip without credits, keep the speed suggestion visible.
+        if (delta > CONFIG.minForwardJumpSec && this._isUserGestureRecent()) {
+          const available = Math.max(0, Math.floor(st.availableSkips || 0));
+          if (available <= 0) {
+            this._setIndicatorMode('speed', { autoReturnMs: CONFIG.speedModeAutoHideMs, reason: 'forced' });
+            this._pulseIndicator();
+            this._updateIndicator(st);
+          }
+        }
+        return;
+      }
+
+      this._pulseIndicator();
 
       if (!(delta > CONFIG.minForwardJumpSec)) return;
 
@@ -316,12 +347,19 @@ const VideoSkipManager = {
       this._setActiveVideo(video);
     };
 
-    st.handlers = { onTimeUpdate, onSeeking, onLoadedMetadata, onPointerEnter, onPlay };
+    const onRateChange = () => {
+      if (!this._active) return;
+      if (this._activeVideo !== video) return;
+      this._updateIndicator(st);
+    };
+
+    st.handlers = { onTimeUpdate, onSeeking, onLoadedMetadata, onPointerEnter, onPlay, onRateChange };
     video.addEventListener('timeupdate', onTimeUpdate, true);
     video.addEventListener('seeking', onSeeking, true);
     video.addEventListener('loadedmetadata', onLoadedMetadata, true);
     video.addEventListener('pointerenter', onPointerEnter, true);
     video.addEventListener('play', onPlay, true);
+    video.addEventListener('ratechange', onRateChange, true);
 
     this._videos.add(video);
     onLoadedMetadata();
@@ -341,6 +379,7 @@ const VideoSkipManager = {
         video.removeEventListener('loadedmetadata', handlers.onLoadedMetadata, true);
         video.removeEventListener('pointerenter', handlers.onPointerEnter, true);
         video.removeEventListener('play', handlers.onPlay, true);
+        video.removeEventListener('ratechange', handlers.onRateChange, true);
       } catch (_) {}
       if (st) st.handlers = null;
     }
@@ -351,18 +390,12 @@ const VideoSkipManager = {
     const now = Date.now();
 
     const available = Math.max(0, Math.floor(st.availableSkips || 0));
-    if (available <= 0) {
-      if (now - this._lastSpeedModeTs < CONFIG.speedModeMinIntervalMs) {
-        this._revert(video, st, info.from);
-        return;
-      }
-      this._lastSpeedModeTs = now;
-    }
+    if (available <= 0) this._lastSpeedModeTs = now;
 
     this._revert(video, st, info.from);
 
     if (available <= 0) {
-      this._setIndicatorMode('speed', { autoReturnMs: CONFIG.speedModeAutoHideMs });
+      this._setIndicatorMode('speed', { autoReturnMs: CONFIG.speedModeAutoHideMs, reason: 'forced' });
       this._pulseIndicator();
     } else {
       this._setIndicatorMode('gauge');
@@ -371,6 +404,13 @@ const VideoSkipManager = {
   },
 
   _revert(video, st, revertTo) {
+    if (st.revertTimeoutId) {
+      try {
+        window.clearTimeout(st.revertTimeoutId);
+      } catch (_) {}
+      st.revertTimeoutId = null;
+    }
+
     st.reverting = true;
     try {
       video.dataset.frictionSkipReverting = '1';
@@ -381,14 +421,23 @@ const VideoSkipManager = {
       0,
       isFinitePositive(video.duration) ? video.duration : Number.MAX_SAFE_INTEGER
     );
+    st.revertTargetTime = target;
     try {
       video.currentTime = target;
     } catch (_) {}
 
-    window.setTimeout(() => {
+    st.revertTimeoutId = window.setTimeout(() => {
       st.reverting = false;
-      st.lastStableTime = clamp(video.currentTime || target, 0, Number.MAX_SAFE_INTEGER);
-      st.lastChargeTime = st.lastStableTime;
+      st.revertTimeoutId = null;
+
+      const finalTarget = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : target;
+      try {
+        video.currentTime = finalTarget;
+      } catch (_) {}
+
+      st.lastStableTime = finalTarget;
+      st.lastChargeTime = finalTarget;
+      st.revertTargetTime = null;
       try {
         delete video.dataset.frictionSkipReverting;
       } catch (_) {}
@@ -428,7 +477,7 @@ const VideoSkipManager = {
     }, CONFIG.indicatorPulseMs);
   },
 
-  _setIndicatorMode(mode, { autoReturnMs } = {}) {
+  _setIndicatorMode(mode, { autoReturnMs, reason } = {}) {
     const next = mode === 'speed' ? 'speed' : 'gauge';
     if (this._indicatorMode === next && !autoReturnMs) return;
     this._indicatorMode = next;
@@ -436,6 +485,9 @@ const VideoSkipManager = {
     if (this._indicatorModeTimer) window.clearTimeout(this._indicatorModeTimer);
     this._indicatorModeTimer = null;
     this._indicatorModeToken++;
+
+    if (next === 'speed' && reason === 'forced') this._indicatorForced = true;
+    if (next === 'gauge') this._indicatorForced = false;
 
     const capsule = this._indicatorEls?.capsule;
     if (capsule) {
@@ -447,7 +499,8 @@ const VideoSkipManager = {
       const token = this._indicatorModeToken;
       this._indicatorModeTimer = window.setTimeout(() => {
         if (token !== this._indicatorModeToken) return;
-        this._setIndicatorMode('gauge');
+        this._indicatorForced = false;
+        if (!this._indicatorHovering) this._setIndicatorMode('gauge');
       }, autoReturnMs);
     }
   },
@@ -619,7 +672,7 @@ const VideoSkipManager = {
           cursor: pointer;
         }
 
-        .sbtn.primary {
+        .sbtn.is-active {
           background: rgba(138, 173, 148, 0.95);
           border-color: transparent;
         }
@@ -667,7 +720,7 @@ const VideoSkipManager = {
               <button class="sbtn ghost" data-action="back" type="button">닫기</button>
               <button class="sbtn" data-rate="1" type="button">1.0x</button>
               <button class="sbtn" data-rate="1.25" type="button">1.25x</button>
-              <button class="sbtn primary" data-rate="1.5" type="button">1.5x</button>
+              <button class="sbtn" data-rate="1.5" type="button">1.5x</button>
             </div>
           </div>
         </div>
@@ -678,8 +731,10 @@ const VideoSkipManager = {
     const count = shadow.getElementById('count');
     const sub = shadow.getElementById('sub');
     const speedSub = shadow.getElementById('speedSub');
+    const speedTitle = shadow.getElementById('speedTitle');
     const ringFg = shadow.getElementById('ringFg');
     const dots = Array.from(shadow.querySelectorAll('.dot'));
+    const speedButtons = Array.from(shadow.querySelectorAll('.sbtn[data-rate]'));
 
     const circumference = 2 * Math.PI * 9;
     if (ringFg) {
@@ -688,19 +743,41 @@ const VideoSkipManager = {
     }
 
     if (capsule) {
+      capsule.addEventListener('pointerenter', () => {
+        this._indicatorHovering = true;
+        this._indicatorHoverOutToken++;
+        if (this._indicatorHoverOutTimer) window.clearTimeout(this._indicatorHoverOutTimer);
+        this._indicatorHoverOutTimer = null;
+
+        this._setIndicatorMode('speed', { reason: 'hover' });
+        const v = this._activeVideo;
+        if (v && v instanceof HTMLVideoElement) this._updateIndicator(this._getState(v));
+      });
+
+      capsule.addEventListener('pointerleave', () => {
+        this._indicatorHovering = false;
+        const token = ++this._indicatorHoverOutToken;
+        if (this._indicatorHoverOutTimer) window.clearTimeout(this._indicatorHoverOutTimer);
+        this._indicatorHoverOutTimer = window.setTimeout(() => {
+          if (token !== this._indicatorHoverOutToken) return;
+          if (this._indicatorForced) return;
+          this._setIndicatorMode('gauge');
+        }, 280);
+      });
+
       capsule.addEventListener('click', (e) => {
         const target = e.target;
         if (!(target instanceof HTMLElement)) return;
         const action = target.getAttribute('data-action');
         if (action === 'back') {
-          this._setIndicatorMode('gauge');
+          if (!this._indicatorHovering && !this._indicatorForced) this._setIndicatorMode('gauge');
           return;
         }
         const rateAttr = target.getAttribute('data-rate');
         if (!rateAttr) return;
         const rate = parseFloat(rateAttr);
         this._applyPlaybackRate(this._activeVideo, rate);
-        this._setIndicatorMode('gauge');
+        if (!this._indicatorHovering && !this._indicatorForced) this._setIndicatorMode('gauge');
       });
 
       capsule.addEventListener('keydown', (e) => {
@@ -710,7 +787,17 @@ const VideoSkipManager = {
 
     this._indicatorRoot = root;
     this._indicatorShadow = shadow;
-    this._indicatorEls = { capsule, count, sub, speedSub, ringFg, dots, circumference };
+    this._indicatorEls = {
+      capsule,
+      count,
+      sub,
+      speedSub,
+      speedTitle,
+      speedButtons,
+      ringFg,
+      dots,
+      circumference,
+    };
     this._indicatorLast = { availableSkips: null, progress: null, cooldownLeft: null, untilNextSec: null };
 
     const mount = this._getPortalMountNode();
@@ -778,8 +865,33 @@ const VideoSkipManager = {
       els.speedSub.textContent = parts.join(' · ');
     }
 
-    if (available > 0 && this._indicatorMode === 'speed') {
+    if (available > 0 && this._indicatorMode === 'speed' && !this._indicatorHovering && !this._indicatorForced) {
       this._setIndicatorMode('gauge');
+    }
+
+    const activeRate = clamp(Number(this._activeVideo?.playbackRate) || 1, 0.25, 4);
+    const rateCandidates = [1, 1.25, 1.5];
+    let nearest = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const r of rateCandidates) {
+      const dist = Math.abs(activeRate - r);
+      if (dist < bestDist) {
+        bestDist = dist;
+        nearest = r;
+      }
+    }
+    if (bestDist > 0.06) nearest = null;
+
+    if (Array.isArray(els.speedButtons)) {
+      for (const btn of els.speedButtons) {
+        const r = parseFloat(String(btn.getAttribute('data-rate') || ''));
+        btn.classList.toggle('is-active', nearest !== null && Number.isFinite(r) && Math.abs(r - nearest) < 0.001);
+      }
+    }
+
+    if (els.speedTitle) {
+      const label = nearest !== null ? `${nearest.toFixed(2).replace(/\\.00$/, '')}x` : `${activeRate.toFixed(2)}x`;
+      els.speedTitle.textContent = `현재 ${label} · 배속으로 이어보기`;
     }
 
     this._indicatorLast = { availableSkips: available, progress: progressRounded, cooldownLeft, untilNextSec };
@@ -790,9 +902,14 @@ const VideoSkipManager = {
     this._indicatorPulseTimer = null;
     if (this._indicatorModeTimer) window.clearTimeout(this._indicatorModeTimer);
     this._indicatorModeTimer = null;
+    if (this._indicatorHoverOutTimer) window.clearTimeout(this._indicatorHoverOutTimer);
+    this._indicatorHoverOutTimer = null;
 
     this._indicatorModeToken++;
     this._indicatorMode = 'gauge';
+    this._indicatorForced = false;
+    this._indicatorHovering = false;
+    this._indicatorHoverOutToken++;
     this._indicatorLast = null;
     this._indicatorEls = null;
     this._indicatorShadow = null;
