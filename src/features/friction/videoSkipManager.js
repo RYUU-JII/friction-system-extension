@@ -189,6 +189,8 @@ const VideoSkipManager = {
       accumulatedTimeSec: 0,
       cooldownUntil: 0,
       lastSrc: String(video.currentSrc || video.src || ''),
+      revertTargetTime: null,
+      revertTimeoutId: null,
       reverting: false,
       handlers: null,
     };
@@ -262,14 +264,39 @@ const VideoSkipManager = {
     };
 
     const onSeeking = () => {
-      if (!this._active || st.reverting) return;
+      if (!this._active) return;
 
       this._setActiveVideo(video);
-      this._pulseIndicator();
 
-      const from = Number(st.lastStableTime) || 0;
+      const from = Number(
+        st.reverting && Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : st.lastStableTime
+      ) || 0;
       const to = Number(video.currentTime) || 0;
       const delta = to - from;
+
+      if (st.reverting) {
+        // Prevent rapid repeated seeks from "slipping through" while we are reverting.
+        // Always force the time back to the revert target.
+        const target = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : from;
+        if (Number.isFinite(target) && Math.abs((video.currentTime || 0) - target) > 0.05) {
+          try {
+            video.currentTime = target;
+          } catch (_) {}
+        }
+
+        // If user keeps trying to skip without credits, keep the speed suggestion visible.
+        if (delta > CONFIG.minForwardJumpSec && this._isUserGestureRecent()) {
+          const available = Math.max(0, Math.floor(st.availableSkips || 0));
+          if (available <= 0) {
+            this._setIndicatorMode('speed', { autoReturnMs: CONFIG.speedModeAutoHideMs });
+            this._pulseIndicator();
+            this._updateIndicator(st);
+          }
+        }
+        return;
+      }
+
+      this._pulseIndicator();
 
       if (!(delta > CONFIG.minForwardJumpSec)) return;
 
@@ -351,13 +378,7 @@ const VideoSkipManager = {
     const now = Date.now();
 
     const available = Math.max(0, Math.floor(st.availableSkips || 0));
-    if (available <= 0) {
-      if (now - this._lastSpeedModeTs < CONFIG.speedModeMinIntervalMs) {
-        this._revert(video, st, info.from);
-        return;
-      }
-      this._lastSpeedModeTs = now;
-    }
+    if (available <= 0) this._lastSpeedModeTs = now;
 
     this._revert(video, st, info.from);
 
@@ -371,6 +392,13 @@ const VideoSkipManager = {
   },
 
   _revert(video, st, revertTo) {
+    if (st.revertTimeoutId) {
+      try {
+        window.clearTimeout(st.revertTimeoutId);
+      } catch (_) {}
+      st.revertTimeoutId = null;
+    }
+
     st.reverting = true;
     try {
       video.dataset.frictionSkipReverting = '1';
@@ -381,14 +409,23 @@ const VideoSkipManager = {
       0,
       isFinitePositive(video.duration) ? video.duration : Number.MAX_SAFE_INTEGER
     );
+    st.revertTargetTime = target;
     try {
       video.currentTime = target;
     } catch (_) {}
 
-    window.setTimeout(() => {
+    st.revertTimeoutId = window.setTimeout(() => {
       st.reverting = false;
-      st.lastStableTime = clamp(video.currentTime || target, 0, Number.MAX_SAFE_INTEGER);
-      st.lastChargeTime = st.lastStableTime;
+      st.revertTimeoutId = null;
+
+      const finalTarget = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : target;
+      try {
+        video.currentTime = finalTarget;
+      } catch (_) {}
+
+      st.lastStableTime = finalTarget;
+      st.lastChargeTime = finalTarget;
+      st.revertTargetTime = null;
       try {
         delete video.dataset.frictionSkipReverting;
       } catch (_) {}
