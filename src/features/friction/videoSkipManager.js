@@ -16,7 +16,7 @@ const CONFIG = {
   indicatorIdleOpacity: 0.4,
   indicatorPulseMs: 2200,
   speedModeMinIntervalMs: 2500,
-  speedModeAutoHideMs: 6500,
+  speedModeAutoHideMs: 5000,
   indicatorInlineMinWidth: 420,
   indicatorInlineMinHeight: 240,
   indicatorInlineInsetPx: 14,
@@ -44,6 +44,13 @@ function formatSeconds(sec) {
     return r ? `${m}m ${r}s` : `${m}m`;
   }
   return `${s}s`;
+}
+
+function formatRingTime(sec) {
+  const s = Math.max(0, Math.ceil(sec || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}'${String(r).padStart(2, '0')}`;
 }
 
 const VideoSkipManager = {
@@ -546,6 +553,7 @@ const VideoSkipManager = {
     this._ensurePool();
     const st = this._getState(video);
     st.lastChargeTime = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
+    st.lastChargeWallMs = Date.now();
     this._ensureIndicator();
     this._updateIndicator(st);
     this._setIndicatorVisibility(!video.paused && !video.ended);
@@ -559,6 +567,7 @@ const VideoSkipManager = {
     st = {
       lastStableTime: t,
       lastChargeTime: t,
+      lastChargeWallMs: Date.now(),
       lastSrc: String(video.currentSrc || video.src || ''),
       revertTargetTime: null,
       revertTimeoutId: null,
@@ -576,6 +585,7 @@ const VideoSkipManager = {
       const t = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
       st.lastStableTime = t;
       st.lastChargeTime = t;
+      st.lastChargeWallMs = Date.now();
     }
   },
 
@@ -594,23 +604,26 @@ const VideoSkipManager = {
       if (!this._active || st.reverting || video.seeking) return;
 
       const pool = this._ensurePool();
+      const now = Date.now();
       const current = clamp(video.currentTime || 0, 0, Number.MAX_SAFE_INTEGER);
-      const deltaStable = current - (Number(st.lastStableTime) || 0);
       st.lastStableTime = current;
 
       if (document.visibilityState !== 'visible' || !document.hasFocus()) {
         st.lastChargeTime = current;
+        st.lastChargeWallMs = now;
         if (this._activeVideo === video) this._setIndicatorVisibility(false);
         return;
       }
 
       if (this._activeVideo && this._activeVideo !== video) {
         st.lastChargeTime = current;
+        st.lastChargeWallMs = now;
         return;
       }
 
       if (video.paused || video.ended) {
         st.lastChargeTime = current;
+        st.lastChargeWallMs = now;
         if (this._activeVideo === video) {
           this._setIndicatorVisibility(false);
           this._updateIndicator(st);
@@ -623,10 +636,19 @@ const VideoSkipManager = {
         this._scheduleIndicatorPositionUpdate();
       }
 
-      const deltaCharge = current - (Number(st.lastChargeTime) || current);
+      const lastChargeWallMs = Number(st.lastChargeWallMs) || now;
+      const deltaRealSec = (now - lastChargeWallMs) / 1000;
+      const deltaVideo = current - (Number(st.lastChargeTime) || current);
       st.lastChargeTime = current;
+      st.lastChargeWallMs = now;
 
-      if (!(deltaCharge > 0 && deltaCharge <= CONFIG.maxChargeDeltaSec)) {
+      if (!(deltaRealSec > 0 && deltaRealSec <= CONFIG.maxChargeDeltaSec)) {
+        if (this._activeVideo === video) this._updateIndicator(st);
+        return;
+      }
+
+      const maxVideoDelta = Math.max(CONFIG.maxChargeDeltaSec, deltaRealSec * 6);
+      if (!(deltaVideo > 0 && deltaVideo <= maxVideoDelta)) {
         if (this._activeVideo === video) this._updateIndicator(st);
         return;
       }
@@ -645,8 +667,8 @@ const VideoSkipManager = {
         return;
       }
 
-      if (deltaStable > 0 && deltaStable <= CONFIG.maxChargeDeltaSec) {
-        pool.accumulatedTimeSec += deltaCharge;
+      if (deltaRealSec > 0) {
+        pool.accumulatedTimeSec += deltaRealSec;
         while (pool.accumulatedTimeSec >= CONFIG.secondsPerSkip && pool.availableSkips < CONFIG.maxSkips) {
           pool.availableSkips += 1;
           pool.accumulatedTimeSec -= CONFIG.secondsPerSkip;
@@ -865,6 +887,7 @@ const VideoSkipManager = {
       const finalTarget = Number.isFinite(st.revertTargetTime) ? st.revertTargetTime : target;
       st.lastStableTime = finalTarget;
       st.lastChargeTime = finalTarget;
+      st.lastChargeWallMs = Date.now();
       st.revertTargetTime = null;
       try {
         delete video.dataset.frictionSkipReverting;
@@ -935,6 +958,7 @@ const VideoSkipManager = {
     if (capsule) {
       capsule.setAttribute('data-mode', next);
       capsule.setAttribute('aria-live', next === 'speed' ? 'polite' : 'off');
+      capsule.setAttribute('data-show-sub', this._indicatorHovering || this._indicatorForced ? 'true' : 'false');
     }
 
     if (next === 'speed' && autoReturnMs && autoReturnMs > 0) {
@@ -988,9 +1012,10 @@ const VideoSkipManager = {
         .capsule {
           pointer-events: auto;
           display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 12px;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 0;
+          padding: 8px 10px;
           border-radius: var(--vs-radius);
           background: var(--vs-bg);
           border: 1px solid var(--vs-border);
@@ -1023,14 +1048,14 @@ const VideoSkipManager = {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          min-width: 150px;
+          min-width: 96px;
         }
 
         .row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
+          gap: 8px;
         }
 
         .label {
@@ -1044,17 +1069,18 @@ const VideoSkipManager = {
           font-size: 11px;
           font-weight: 800;
           color: var(--vs-muted);
+          margin-right: 4px;
         }
 
         .dots {
           display: flex;
-          gap: 6px;
+          gap: 7px;
           align-items: center;
         }
 
         .dot {
-          width: 8px;
-          height: 8px;
+          width: 9px;
+          height: 9px;
           border-radius: 999px;
           background: rgba(255, 255, 255, 0.08);
           box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -1066,16 +1092,34 @@ const VideoSkipManager = {
           box-shadow: 0 0 0 1px rgba(138, 173, 148, 0.28);
         }
 
-        .sub {
-          font-size: 10px;
-          color: var(--vs-muted);
-          opacity: 0.9;
+        .ring-wrap {
+          position: relative;
+          width: 28px;
+          height: 28px;
+          flex: 0 0 auto;
         }
 
         .ring {
-          width: 24px;
-          height: 24px;
-          flex: 0 0 auto;
+          width: 100%;
+          height: 100%;
+        }
+
+        .ring-text {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 800;
+          color: var(--vs-fg);
+          opacity: 0;
+          transition: opacity 160ms ease;
+          pointer-events: none;
+        }
+
+        .capsule[data-show-sub="true"] .ring-text {
+          opacity: 0.9;
         }
 
         .ring circle {
@@ -1094,15 +1138,26 @@ const VideoSkipManager = {
           stroke: rgba(212, 138, 138, 0.9);
         }
 
-        .view { display: none; }
-        .capsule[data-mode="gauge"] .view-gauge { display: block; }
-        .capsule[data-mode="speed"] .view-speed { display: block; }
+        .view-gauge { display: block; }
 
-        .speed-wrap {
+        .speed-panel {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          min-width: 190px;
+          width: 100%;
+          max-height: 0;
+          opacity: 0;
+          overflow: hidden;
+          margin-top: 0;
+          transition: max-height 200ms ease, opacity 200ms ease, margin-top 200ms ease;
+          pointer-events: none;
+        }
+
+        .capsule[data-mode="speed"] .speed-panel {
+          max-height: 180px;
+          opacity: 1;
+          margin-top: 8px;
+          pointer-events: auto;
         }
 
         .speed-title {
@@ -1112,12 +1167,17 @@ const VideoSkipManager = {
           opacity: 0.95;
         }
 
+        .speed-title:empty {
+          display: none;
+        }
+
         .speed-actions {
           display: flex;
-          gap: 8px;
-          justify-content: flex-end;
-          align-items: center;
-          flex-wrap: wrap;
+          flex-direction: column;
+          gap: 6px;
+          justify-content: flex-start;
+          align-items: stretch;
+          flex-wrap: nowrap;
         }
 
         .sbtn {
@@ -1128,6 +1188,8 @@ const VideoSkipManager = {
           border-radius: 12px;
           font-weight: 850;
           cursor: pointer;
+          width: 100%;
+          text-align: center;
         }
 
         .sbtn.is-active {
@@ -1135,8 +1197,9 @@ const VideoSkipManager = {
           border-color: transparent;
         }
 
-        .sbtn.ghost {
-          background: transparent;
+        .sbtn:hover {
+          border-color: rgba(138, 173, 148, 0.45);
+          background: rgba(138, 173, 148, 0.18);
         }
 
         .capsule:focus-visible { outline: 3px solid rgba(138, 173, 148, 0.35); outline-offset: 2px; }
@@ -1149,7 +1212,7 @@ const VideoSkipManager = {
       </style>
 
       <div class="capsule" id="capsule" aria-label="Video skip credits" data-mode="gauge" tabindex="0">
-        <div class="view view-gauge">
+        <div class="view-gauge">
           <div class="left">
             <div class="row">
               <div class="label">SKIP</div>
@@ -1161,34 +1224,31 @@ const VideoSkipManager = {
                 <span class="dot" data-dot="1"></span>
                 <span class="dot" data-dot="2"></span>
               </div>
-              <svg class="ring" viewBox="0 0 24 24" aria-hidden="true">
-                <circle class="bg" cx="12" cy="12" r="9"></circle>
-                <circle class="fg" id="ringFg" cx="12" cy="12" r="9"></circle>
-              </svg>
+              <div class="ring-wrap">
+                <svg class="ring" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle class="bg" cx="12" cy="12" r="9"></circle>
+                  <circle class="fg" id="ringFg" cx="12" cy="12" r="9"></circle>
+                </svg>
+                <div class="ring-text" id="ringText"></div>
+              </div>
             </div>
-            <div class="sub" id="sub"></div>
           </div>
         </div>
 
-        <div class="view view-speed">
-          <div class="speed-wrap">
-            <div class="speed-title" id="speedTitle">스킵권 없음 · 배속으로 이어보기</div>
-            <div class="sub" id="speedSub"></div>
+        <div class="speed-panel">
+            <div class="speed-title" id="speedTitle"></div>
             <div class="speed-actions">
-              <button class="sbtn ghost" data-action="back" type="button">닫기</button>
               <button class="sbtn" data-rate="1" type="button">1.0x</button>
               <button class="sbtn" data-rate="1.25" type="button">1.25x</button>
               <button class="sbtn" data-rate="1.5" type="button">1.5x</button>
             </div>
-          </div>
         </div>
       </div>
     `;
 
     const capsule = shadow.getElementById('capsule');
     const count = shadow.getElementById('count');
-    const sub = shadow.getElementById('sub');
-    const speedSub = shadow.getElementById('speedSub');
+    const ringText = shadow.getElementById('ringText');
     const speedTitle = shadow.getElementById('speedTitle');
     const ringFg = shadow.getElementById('ringFg');
     const dots = Array.from(shadow.querySelectorAll('.dot'));
@@ -1214,23 +1274,18 @@ const VideoSkipManager = {
 
       capsule.addEventListener('pointerleave', () => {
         this._indicatorHovering = false;
-        const token = ++this._indicatorHoverOutToken;
         if (this._indicatorHoverOutTimer) window.clearTimeout(this._indicatorHoverOutTimer);
-        this._indicatorHoverOutTimer = window.setTimeout(() => {
-          if (token !== this._indicatorHoverOutToken) return;
-          if (this._indicatorForced) return;
-          this._setIndicatorMode('gauge');
-        }, 280);
+        this._indicatorHoverOutTimer = null;
+        if (this._indicatorForced) {
+          capsule.setAttribute('data-show-sub', 'true');
+          return;
+        }
+        this._setIndicatorMode('gauge');
       });
 
       capsule.addEventListener('click', (e) => {
         const target = e.target;
         if (!(target instanceof HTMLElement)) return;
-        const action = target.getAttribute('data-action');
-        if (action === 'back') {
-          if (!this._indicatorHovering && !this._indicatorForced) this._setIndicatorMode('gauge');
-          return;
-        }
         const rateAttr = target.getAttribute('data-rate');
         if (!rateAttr) return;
         const rate = parseFloat(rateAttr);
@@ -1248,8 +1303,7 @@ const VideoSkipManager = {
     this._indicatorEls = {
       capsule,
       count,
-      sub,
-      speedSub,
+      ringText,
       speedTitle,
       speedButtons,
       ringFg,
@@ -1283,6 +1337,9 @@ const VideoSkipManager = {
         ? Math.max(0, Math.ceil(CONFIG.secondsPerSkip - (Number(pool.accumulatedTimeSec) || 0)))
         : 0;
 
+    const showSub = this._indicatorHoverng || this._indicatorForced;
+    if (els.capsule) els.capsule.setAttribute('data-show-sub', showSub ? 'true' : 'false');
+
     const last = this._indicatorLast || {};
     const progressRounded = Math.round(progress * 1000) / 1000;
 
@@ -1300,30 +1357,14 @@ const VideoSkipManager = {
       els.ringFg.style.strokeDashoffset = `${offset}`;
     }
 
-    if (
-      (last.cooldownLeft !== cooldownLeft ||
-        last.availableSkips !== available ||
-        last.untilNextSec !== untilNextSec) &&
-      els.sub
-    ) {
-      const parts = [];
-      if (available < CONFIG.maxSkips) parts.push(`+1까지 ${formatSeconds(untilNextSec)}`);
-      else parts.push('FULL');
-      if (cooldownLeft > 0 && CONFIG.cooldownMs > 0) parts.push(`쿨다운 ${formatSeconds(cooldownLeft)}`);
-      els.sub.textContent = parts.join(' · ');
+    if (els.ringText) {
+      if (showSub && available < CONFIG.maxSkips) {
+        els.ringText.textContent = formatRingTime(untilNextSec);
+      } else {
+        els.ringText.textContent = '';
+      }
     }
 
-    if (
-      (last.cooldownLeft !== cooldownLeft ||
-        last.availableSkips !== available ||
-        last.untilNextSec !== untilNextSec) &&
-      els.speedSub
-    ) {
-      const parts = [];
-      if (available < CONFIG.maxSkips) parts.push(`+1까지 ${formatSeconds(untilNextSec)}`);
-      if (cooldownLeft > 0 && CONFIG.cooldownMs > 0) parts.push(`쿨다운 ${formatSeconds(cooldownLeft)}`);
-      els.speedSub.textContent = parts.join(' · ');
-    }
 
     if (available > 0 && this._indicatorMode === 'speed' && !this._indicatorHovering && !this._indicatorForced) {
       this._setIndicatorMode('gauge');
@@ -1350,8 +1391,7 @@ const VideoSkipManager = {
     }
 
     if (els.speedTitle) {
-      const label = nearest !== null ? `${nearest.toFixed(2).replace(/\\.00$/, '')}x` : `${activeRate.toFixed(2)}x`;
-      els.speedTitle.textContent = `현재 ${label} · 배속으로 이어보기`;
+      els.speedTitle.textContent = this._indicatorForced ? '제안' : '';
     }
 
     this._indicatorLast = { availableSkips: available, progress: progressRounded, cooldownLeft, untilNextSec };

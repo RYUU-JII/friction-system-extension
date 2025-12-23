@@ -37,7 +37,7 @@ const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
 
 const SETTING_METADATA_V2 = {
   videoSkipGuard: {
-    label: '비디오 앞으로 스킵 제한',
+    label: '비디오 스킵 제한',
     control: 'toggle',
     type: 'boolean',
     unit: '',
@@ -46,7 +46,7 @@ const SETTING_METADATA_V2 = {
     category: 'media',
     tier: 'advanced',
     order: 5,
-    helper: '앞으로 점프(seeking)를 쿨다운+길이기반 쿼터로 제한하고, 배속 CTA를 제공합니다. (세션 단위)',
+    helper: '영상에서 앞으로 점프하려면 스킵권이 필요하게됨. 스킵권은 시간에 따라 충전됨.'
   },
   blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', tier: 'basic', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
   desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
