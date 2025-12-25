@@ -120,10 +120,10 @@ const VisualManager = {
 
   update(filters) {
     const blur = filters.blur;
-    const desat = filters.desaturation;
+    const saturation = filters.saturation || filters.desaturation;
     const blurActive = !!(blur && blur.isActive);
-    const desatActive = !!(desat && desat.isActive);
-    const isActive = blurActive || desatActive;
+    const saturationActive = !!(saturation && saturation.isActive);
+    const isActive = blurActive || saturationActive;
 
     if (!isActive) {
       this.remove();
@@ -131,10 +131,10 @@ const VisualManager = {
     }
 
     const blurValue = blurActive ? String(blur.value) : '0px';
-    const desatValue = desatActive ? String(desat.value) : '0%';
+    const saturationValue = saturationActive ? String(saturation.value) : '1';
 
     setRootVar('--f-blur', blurValue);
-    setRootVar('--f-desat', desatValue);
+    setRootVar('--f-saturation', saturationValue);
     setRootAttribute(ROOT_ATTRS.VISUAL, '1');
 
     const selectors = getSiteSelectors(window.location?.hostname);

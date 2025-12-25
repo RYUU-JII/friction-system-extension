@@ -1,4 +1,4 @@
-import { CONFIG_DEFAULT_FILTER_SETTINGS } from '../../shared/config/index.js';
+import { CONFIG_DEFAULT_FILTER_SETTINGS, normalizeFilterSettings } from '../../shared/config/index.js';
 import { createOverviewTab } from './tabs/overviewTab.js';
 import { createDetailedRecapTab } from './tabs/detailedRecapTab.js';
 import { createBlocklistTab } from './tabs/blocklistTab.js';
@@ -22,27 +22,7 @@ let scheduleTab = null;
 const UI = {};
 
 function mergeFilterSettings(partial) {
-  const merged = {};
-  const source = partial && typeof partial === 'object' ? partial : {};
-
-  for (const [key, def] of Object.entries(CONFIG_DEFAULT_FILTER_SETTINGS)) {
-    const current = source[key];
-    merged[key] = {
-      isActive: typeof current?.isActive === 'boolean' ? current.isActive : def.isActive,
-      value: current?.value !== undefined ? current.value : def.value,
-    };
-  }
-
-  for (const [key, value] of Object.entries(source)) {
-    if (!(key in merged)) merged[key] = value;
-  }
-
-  if (source.socialMetrics?.isActive) {
-    if (!source.socialEngagement) merged.socialEngagement.isActive = true;
-    if (!source.socialExposure) merged.socialExposure.isActive = true;
-  }
-
-  return merged;
+  return normalizeFilterSettings(partial || {});
 }
 
 function getSavedActiveTabId() {

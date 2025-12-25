@@ -1,5 +1,5 @@
 import DataManager from '../../shared/storage/DataManager.js';
-import { CONFIG_DEFAULT_FILTER_SETTINGS } from '../../shared/config/index.js';
+import { CONFIG_DEFAULT_FILTER_SETTINGS, materializeFilterSettings } from '../../shared/config/index.js';
 import { isFrictionTime, getHostname } from '../../shared/utils/index.js';
 import VisualManager from './visualManager.js';
 import SocialMetricsManager from './socialMetricsManager.js';
@@ -25,7 +25,7 @@ export async function earlyApplyFriction() {
 
   if (!isBlocked || !isTimeActive) return;
 
-  const filters = items.filterSettings || {};
+  const filters = materializeFilterSettings(items.filterSettings || {});
   TextManager.update(filters);
   TextShuffleManager.update(filters.textShuffle);
   if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
