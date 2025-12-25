@@ -14,6 +14,11 @@ export function safeSendMessage(message) {
   }
 }
 
-export function sendAnxietyMetric(metric) {
-  safeSendMessage({ type: 'TRACK_ANXIETY', metric });
+export function sendBehaviorEvent(name, payload = {}) {
+  const event = {
+    name,
+    ts: Date.now(),
+    ...(payload && typeof payload === 'object' ? payload : {}),
+  };
+  safeSendMessage({ type: 'TRACK_BEHAVIOR_EVENT', event });
 }

@@ -1,4 +1,9 @@
-import { CONFIG_DEFAULT_FILTER_SETTINGS } from '../../../shared/config/index.js';
+import {
+  CONFIG_DEFAULT_FILTER_SETTINGS,
+  clampFilterStep,
+  getFilterStepValue,
+  materializeFilterSettings,
+} from '../../../shared/config/index.js';
 import { loadTextContent } from '../../../shared/utils/fileLoader.js';
 
 const SETTINGS_PREVIEW_TEXT_PATH = 'samples/texts/text_sample_1.txt';
@@ -35,6 +40,23 @@ function resolveAssetUrl(path) {
 const ADVANCED_TIER = 'advanced';
 const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
 
+function formatStepDisplay(key, step) {
+  const value = getFilterStepValue(key, clampFilterStep(step));
+  if (value === null || value === undefined) return '';
+  if (key === 'clickDelay') {
+    const seconds = Number(value) / 1000;
+    if (!Number.isFinite(seconds)) return '';
+    const label = seconds.toFixed(1).replace(/\.0$/, '');
+    return `${label}s`;
+  }
+  if (key === 'scrollFriction') {
+    const ms = Number(value);
+    if (!Number.isFinite(ms)) return '';
+    return `${Math.round(ms)}ms`;
+  }
+  return String(value);
+}
+
 const SETTING_METADATA_V2 = {
   videoSkipGuard: {
     label: '비디오 스킵 제한',
@@ -48,42 +70,80 @@ const SETTING_METADATA_V2 = {
     order: 5,
     helper: '영상에서 앞으로 점프하려면 스킵권이 필요하게됨. 스킵권은 시간에 따라 충전됨.'
   },
-  blur: { label: '블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'media', tier: 'basic', order: 10, placeholder: '1.5', min: '0', max: '5', step: '0.1' },
-  desaturation: { label: '채도 감소', control: 'range', type: 'number', unit: '%', unitSuffix: '%', storage: 'cssUnit', category: 'media', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '100', step: '1' },
-  letterSpacing: { label: '글자 간격', control: 'range', type: 'number', unit: 'em', unitSuffix: 'em', storage: 'cssUnit', category: 'text', tier: 'basic', order: 10, placeholder: '0.1', min: '0', max: '0.5', step: '0.02' },
-  textOpacity: {
-    label: '투명도',
+  blur: {
+    label: '블러',
     control: 'range',
     type: 'number',
     unit: '',
     unitSuffix: '',
-    storage: 'numberString',
+    storage: 'step',
+    category: 'media',
+    tier: 'basic',
+    order: 10,
+    min: '0',
+    max: '3',
+    step: '1',
+    displayValue: (inputValue) => formatStepDisplay('blur', inputValue),
+  },
+  saturation: {
+    label: '채도 감소',
+    control: 'range',
+    type: 'number',
+    unit: '',
+    unitSuffix: '',
+    storage: 'step',
+    category: 'media',
+    tier: 'basic',
+    order: 20,
+    min: '0',
+    max: '3',
+    step: '1',
+    displayValue: (inputValue) => formatStepDisplay('saturation', inputValue),
+  },
+  letterSpacing: {
+    label: '글자 간격',
+    control: 'range',
+    type: 'number',
+    unit: '',
+    unitSuffix: '',
+    storage: 'step',
+    category: 'text',
+    tier: 'basic',
+    order: 10,
+    min: '0',
+    max: '3',
+    step: '1',
+    displayValue: (inputValue) => formatStepDisplay('letterSpacing', inputValue),
+  },
+  textOpacity: {
+    label: 'Text Opacity',
+    control: 'range',
+    type: 'number',
+    unit: '',
+    unitSuffix: '',
+    storage: 'step',
     category: 'text',
     tier: 'advanced',
     order: 50,
-    placeholder: '0',
     min: '0',
-    max: '100',
+    max: '3',
     step: '1',
-    fromStorage: (storedValue) => {
-      const opacity = Math.max(0.25, Math.min(1, parseFloat(String(storedValue ?? '1')) || 1));
-      const strength = ((1 - opacity) / (1 - 0.25)) * 100;
-      return String(Math.max(0, Math.min(100, Math.round(strength))));
-    },
-    toStorage: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const opacity = 1 - (strength / 100) * (1 - 0.25);
-      return opacity.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-    },
-    displayValue: (inputValue) => {
-      const strength = Math.max(0, Math.min(100, parseFloat(String(inputValue)) || 0));
-      const opacity = 1 - (strength / 100) * (1 - 0.25);
-      return opacity.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-    },
+    displayValue: (inputValue) => formatStepDisplay('textOpacity', inputValue),
   },
   textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', tier: 'basic', order: 20, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
   textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', tier: 'advanced', order: 30, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
-  textShuffle: { label: '텍스트 셔플 강도', control: 'range', type: 'number', unit: '', unitSuffix: '', storage: 'number', category: 'text', tier: 'advanced', order: 40, placeholder: '0.15', min: '0', max: '1', step: '0.05' },
+  textShuffle: {
+    label: '텍스트 셔플 강도',
+    control: 'toggle',
+    type: 'boolean',
+    unit: '',
+    unitSuffix: '',
+    storage: 'raw',
+    category: 'text',
+    tier: 'advanced',
+    order: 40,
+    helper: 'Shuffle text on/off.',
+  },
   socialEngagement: {
     label: '사회적 지표 숨김',
     control: 'toggle',
@@ -109,8 +169,36 @@ const SETTING_METADATA_V2 = {
     helper: '조회수/업로드 시간 등 노출·신선도 지표를 숨깁니다.',
   },
   delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', tier: 'advanced', order: 40, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
-  clickDelay: { label: '클릭 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 10, placeholder: '1000', min: '0', max: '3000', step: '50' },
-  scrollFriction: { label: '스크롤 마찰', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'basic', order: 20, placeholder: '50', min: '0', max: '300', step: '10' },
+  clickDelay: {
+    label: 'Click Delay',
+    control: 'range',
+    type: 'number',
+    unit: '',
+    unitSuffix: '',
+    storage: 'step',
+    category: 'delay',
+    tier: 'basic',
+    order: 10,
+    min: '0',
+    max: '3',
+    step: '1',
+    displayValue: (inputValue) => formatStepDisplay('clickDelay', inputValue),
+  },
+  scrollFriction: {
+    label: 'Scroll Batching',
+    control: 'range',
+    type: 'number',
+    unit: '',
+    unitSuffix: '',
+    storage: 'step',
+    category: 'delay',
+    tier: 'basic',
+    order: 20,
+    min: '0',
+    max: '3',
+    step: '1',
+    displayValue: (inputValue) => formatStepDisplay('scrollFriction', inputValue),
+  },
   inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'advanced', order: 30, placeholder: '120', min: '0', max: '500', step: '10' },
 };
 
@@ -128,6 +216,11 @@ function valueForInputV2(meta, storedValue) {
     if (typeof value === 'number') return value;
     const n = parseInt(String(value), 10);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  if (meta.storage === 'step') {
+    const n = parseInt(String(value), 10);
+    return Number.isFinite(n) ? clampFilterStep(n) : 0;
   }
 
   if (meta.storage === 'raw') return String(value);
@@ -167,6 +260,7 @@ function valueForStorageV2(_key, meta, inputValue) {
   if (typeof meta?.toStorage === 'function') return meta.toStorage(raw);
 
   if (meta.storage === 'ms') return parseInt(String(raw), 10) || 0;
+  if (meta.storage === 'step') return clampFilterStep(parseInt(String(raw), 10) || 0);
   if (meta.storage === 'raw') return String(raw);
   if (meta.storage === 'secondsCss') {
     const num = parseFloat(String(raw)) || 0;
@@ -440,7 +534,8 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
       const meta = SETTING_METADATA_V2[key];
       const input = card.querySelector('.input-value');
-      const value = valueForStorageV2(key, meta, input?.value);
+      let value = input ? valueForStorageV2(key, meta, input?.value) : next[key]?.value;
+      if (value === undefined) value = CONFIG_DEFAULT_FILTER_SETTINGS[key]?.value ?? '';
 
       next[key] = {
         isActive: !!toggle.checked,
@@ -730,7 +825,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
   async function updateSettingsPreviewV2() {
     if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
-    const settings = getSettings();
+    const settings = materializeFilterSettings(getSettings() || {});
     const token = ++settingsPreviewUpdateToken;
 
     clearFrames();
@@ -772,7 +867,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
       const filterParts = [];
       if (settings?.blur?.isActive) filterParts.push(`blur(${settings.blur.value})`);
-      if (settings?.desaturation?.isActive) filterParts.push(`saturate(calc(100% - ${settings.desaturation.value}))`);
+      if (settings?.saturation?.isActive) filterParts.push(`saturate(${settings.saturation.value})`);
       if (filterParts.length > 0) {
         ia.style.filter = filterParts.join(' ');
         ia.style.willChange = 'filter';

@@ -1,54 +1,68 @@
-import { CONFIG_DEFAULT_FILTER_SETTINGS } from '../../shared/config/index.js';
+import DataManager from '../../shared/storage/DataManager.js';
+import {
+    CONFIG_DEFAULT_FILTER_SETTINGS,
+    materializeFilterSettings,
+    normalizeFilterSettings,
+} from '../../shared/config/index.js';
 import { isFrictionTime, getLocalDateStr, ensureNumber, getHostname } from '../../shared/utils/index.js';
-import { calculateAnxietyScore, getInterventionLevel } from '../../features/anxiety-engine/index.js';
 
 // ===========================================================
 // 0. 상수 및 전역 변수 설정
 // ===========================================================
 
+const dataManager = DataManager.getInstance();
 const DEFAULT_FILTER_SETTINGS = CONFIG_DEFAULT_FILTER_SETTINGS;
-const SHORT_DWELL_THRESHOLD = 10 * 1000; 
-const MAX_WINDOW_SIZE = 5;
+const SHORT_DWELL_THRESHOLD = 10 * 1000;
 
-// [불안 엔진 변수]
-let anxietyBuffer = { min1: createEmptyMetrics() };
-let hourlyAnxietyAccumulator = createEmptyMetrics(); 
-let activeMinutesInHour = 0; 
-let lastHourlyRecordTime = Date.now();
-let anxietyWindow = []; 
-let tabEntryTimes = new Map(); 
-
-// [시간 추적 변수]
-let statsCache = { dates: {} };
+let currentTickBuffer = createEmptyTickBuffer();
+let statsCache = { dates: {}, analysisLogs: [] };
 let cacheLoaded = false;
-let saveTimer = null;
-let savePending = null;
+let statsDirty = false;
+let lastTickAt = 0;
+let lastPurgeAt = 0;
+
 let idleState = 'active';
 let lastIdleStateCheck = 0;
-let lastActiveTabId = null;  // 현재 활성 탭 ID
-let focusedWindowId = null;  // 현재 포커스된 윈도우 ID (매우 중요)
+let lastActiveTabId = null;  // current foreground tab id
+let focusedWindowId = null;  // current focused window id
+let tabEntryTimes = new Map();
+let tabLastActiveAt = new Map();
+let activeTabInfo = { tabId: null, hostname: null, startedAt: null };
 
 const TRACKING_INTERVAL_MS = 60_000; // 1 minute
 const LONG_GAP_LIMIT_MS = TRACKING_INTERVAL_MS * 2;
-const MAX_DAYS_STORED = 30;
+const MAX_DAYS_STORED = 90;
+const ANALYSIS_LOG_DAYS = 7;
 const IDLE_DETECTION_SECONDS = 60;
 const IDLE_STATE_CACHE_TTL_MS = 10_000;
-const CACHE_SAVE_INTERVAL_MS = 300000; // 5분 강제 저장
-
-// 5분마다 강제 저장 (데이터 유실 방지 안전장치)
-setInterval(() => {
-    saveStatsCache();
-}, CACHE_SAVE_INTERVAL_MS);
+const IDLE_TAB_THRESHOLD_MS = 5 * 60_000;
 
 // ===========================================================
-// 1. 유틸리티 및 설정 함수
+// 1. Utility helpers
 // ===========================================================
 
 function createEmptyMetrics() {
     return {
-        clicks: 0, scrollSpikes: 0, dragCount: 0, backspaces: 0,
-        dwellTime: 0, backHistory: 0, tabSwitches: 0, domLoops: 0,
-        tabBursts: 0, videoSkips: 0, mediaDensity: 0
+        clicks: 0,
+        backspaces: 0,
+        dragCount: 0,
+        backHistory: 0,
+        tabSwitches: 0,
+        videoSkips: 0,
+        pageLoads: 0,
+        scrollEvents: 0,
+        scrollDeltaX: 0,
+        scrollDeltaY: 0,
+        scrollSpikes: 0,
+        shortDwells: 0,
+    };
+}
+
+function createEmptyTickBuffer() {
+    return {
+        metrics: createEmptyMetrics(),
+        focusDurations: new Map(),
+        startTs: Date.now(),
     };
 }
 
@@ -81,14 +95,12 @@ function setupIdleDetection() {
     try { chrome.idle.setDetectionInterval(IDLE_DETECTION_SECONDS); } catch (_) {}
 
     chrome.idle.onStateChanged.addListener((state) => {
-        idleState = state || idleState;
-        lastIdleStateCheck = Date.now();
+        handleIdleStateChange(state);
     });
 
     chrome.idle.queryState(IDLE_DETECTION_SECONDS, (state) => {
         if (chrome.runtime.lastError) return;
-        idleState = state || idleState;
-        lastIdleStateCheck = Date.now();
+        handleIdleStateChange(state);
     });
 }
 
@@ -100,30 +112,31 @@ function getIdleState() {
     return new Promise((resolve) => {
         chrome.idle.queryState(IDLE_DETECTION_SECONDS, (state) => {
             if (chrome.runtime.lastError) return resolve(idleState);
-            idleState = state || idleState;
+            handleIdleStateChange(state);
             resolve(idleState);
         });
     });
 }
 
-function mergeFilterSettings(partial) {
-    const merged = {};
-    const source = partial && typeof partial === 'object' ? partial : {};
-    for (const [key, def] of Object.entries(DEFAULT_FILTER_SETTINGS)) {
-        const current = source[key];
-        merged[key] = {
-            isActive: typeof current?.isActive === 'boolean' ? current.isActive : def.isActive,
-            value: current?.value !== undefined ? current.value : def.value,
-        };
+function handleIdleStateChange(state) {
+    const nextState = state || idleState;
+    const now = Date.now();
+    if (nextState === idleState) {
+        lastIdleStateCheck = now;
+        return;
     }
-    for (const [key, value] of Object.entries(source)) {
-        if (!(key in merged)) merged[key] = value;
+
+    if (idleState === 'active' && nextState !== 'active') {
+        recordActiveTabDuration(now);
+        if (activeTabInfo) activeTabInfo.startedAt = null;
+    } else if (idleState !== 'active' && nextState === 'active') {
+        if (activeTabInfo && activeTabInfo.hostname) {
+            activeTabInfo.startedAt = now;
+        }
     }
-    if (source.socialMetrics?.isActive) {
-        if (!source.socialEngagement) merged.socialEngagement.isActive = true;
-        if (!source.socialExposure) merged.socialExposure.isActive = true;
-    }
-    return merged;
+
+    idleState = nextState;
+    lastIdleStateCheck = now;
 }
 
 function mergeNudgeConfig(partial) {
@@ -163,37 +176,18 @@ async function markNudgeAck(key) {
 }
 
 // ===========================================================
-// 2. 데이터 저장 및 복구 (Engine + Stats 통합)
+// 2. Cache + behavior buffer
 // ===========================================================
 
-// 디바운스 저장: 빈번한 연산에도 스토리지는 가끔만 씀 (시스템 부하 최소화)
-function saveStatsDebounced() {
-    if (savePending) clearTimeout(savePending);
-    savePending = setTimeout(() => {
-        saveStatsCache();
-        savePending = null;
-    }, 1000); // 1초 딜레이
+function markStatsDirty() {
+    statsDirty = true;
 }
 
 async function loadStatsCache() {
     if (cacheLoaded) return;
     try {
-        const data = await chrome.storage.local.get(['stats', 'engineState']);
-        
-        // 1. Stats 복구
-        if (data.stats && data.stats.dates) {
-            statsCache = data.stats;
-        }
-
-        // 2. Engine State 복구
-        if (data.engineState) {
-            const es = data.engineState;
-            hourlyAnxietyAccumulator = es.hourlyAccumulator || createEmptyMetrics();
-            activeMinutesInHour = es.activeMinutes || 0;
-            lastHourlyRecordTime = es.lastRecordTime || Date.now();
-            anxietyWindow = es.window || [];
-        }
-        
+        const stats = await dataManager.getStats();
+        statsCache = stats;
         pruneOldData();
         cacheLoaded = true;
     } catch (e) {
@@ -202,26 +196,164 @@ async function loadStatsCache() {
     }
 }
 
-async function saveStatsCache() {
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-
-    const engineSnapshot = {
-        hourlyAccumulator: hourlyAnxietyAccumulator,
-        activeMinutes: activeMinutesInHour,
-        lastRecordTime: lastHourlyRecordTime,
-        window: anxietyWindow
-    };
-
-    const dataToSave = {
-        stats: statsCache,
-        engineState: engineSnapshot
-    };
-
+async function saveStatsCache({ force = false } = {}) {
+    if (!statsDirty && !force) return;
     try {
-        await chrome.storage.local.set(dataToSave);
+        await dataManager.setStats(statsCache);
+        statsDirty = false;
     } catch (e) {
         console.error("Failed to save stats:", e);
     }
+}
+
+function maybePurgeAnalysisLogs(now = Date.now()) {
+    if (now - lastPurgeAt < 60 * 60 * 1000) return;
+    lastPurgeAt = now;
+
+    if (!Array.isArray(statsCache.analysisLogs)) {
+        statsCache.analysisLogs = [];
+        return;
+    }
+
+    const cutoff = now - ANALYSIS_LOG_DAYS * 24 * 60 * 60 * 1000;
+    const filtered = statsCache.analysisLogs.filter((entry) => {
+        const ts = Number(entry?.ts ?? entry?.timestamp ?? entry?.time);
+        if (!Number.isFinite(ts)) return true;
+        return ts >= cutoff;
+    });
+
+    if (filtered.length !== statsCache.analysisLogs.length) {
+        statsCache.analysisLogs = filtered;
+        statsDirty = true;
+    }
+}
+
+function recordBehaviorEvent(event) {
+    if (!event || !currentTickBuffer?.metrics) return;
+    const metrics = currentTickBuffer.metrics;
+    const name = event.name;
+
+    switch (name) {
+        case 'click':
+            metrics.clicks += 1;
+            break;
+        case 'backspace':
+            metrics.backspaces += 1;
+            break;
+        case 'drag':
+            metrics.dragCount += 1;
+            break;
+        case 'backHistory':
+            metrics.backHistory += 1;
+            break;
+        case 'videoSkip':
+            metrics.videoSkips += 1;
+            break;
+        case 'scroll': {
+            const dx = Number(event.deltaX) || 0;
+            const dy = Number(event.deltaY) || 0;
+            metrics.scrollEvents += 1;
+            metrics.scrollDeltaX += Math.abs(dx);
+            metrics.scrollDeltaY += Math.abs(dy);
+            break;
+        }
+        case 'scrollSpike':
+            metrics.scrollSpikes += 1;
+            break;
+        default:
+            break;
+    }
+}
+
+function recordActiveTabDuration(now) {
+    if (!activeTabInfo || !activeTabInfo.hostname) return;
+    if (!Number.isFinite(activeTabInfo.startedAt)) return;
+
+    const elapsed = now - activeTabInfo.startedAt;
+    if (elapsed <= 0) {
+        activeTabInfo.startedAt = now;
+        return;
+    }
+
+    const prev = currentTickBuffer.focusDurations.get(activeTabInfo.hostname) || 0;
+    currentTickBuffer.focusDurations.set(activeTabInfo.hostname, prev + elapsed);
+    activeTabInfo.startedAt = now;
+}
+
+function updateActiveTabInfo(tab, now) {
+    if (!tab || !tab.url) {
+        activeTabInfo = { tabId: null, hostname: null, startedAt: null };
+        return;
+    }
+    const hostname = getHostname(tab.url);
+    if (!hostname) {
+        activeTabInfo = { tabId: tab.id, hostname: null, startedAt: null };
+        return;
+    }
+
+    recordActiveTabDuration(now);
+    activeTabInfo = {
+        tabId: tab.id,
+        hostname,
+        startedAt: idleState === 'active' ? now : null,
+    };
+}
+
+function buildAppliedFrictionSnapshot(filterSettings) {
+    const normalized = normalizeFilterSettings(filterSettings || {});
+    return {
+        steps: {
+            blur: normalized.blur?.step ?? 0,
+            saturation: normalized.saturation?.step ?? 0,
+            textOpacity: normalized.textOpacity?.step ?? 0,
+            letterSpacing: normalized.letterSpacing?.step ?? 0,
+            clickDelay: normalized.clickDelay?.step ?? 0,
+            scrollFriction: normalized.scrollFriction?.step ?? 0,
+        },
+        toggles: {
+            textShuffle: !!normalized.textShuffle?.isActive,
+            socialMetrics: !!normalized.socialEngagement?.isActive || !!normalized.socialExposure?.isActive,
+        },
+    };
+}
+
+function buildFocusTabSnapshot() {
+    const hostname = activeTabInfo?.hostname;
+    if (!hostname) return null;
+    const durationMs = currentTickBuffer.focusDurations.get(hostname) || 0;
+    return {
+        hostname,
+        durationMs: Math.max(0, Math.round(durationMs)),
+        metrics: { ...currentTickBuffer.metrics },
+    };
+}
+
+async function buildBackgroundContext(now) {
+    const tabs = await chrome.tabs.query({});
+    const audibleTabs = new Set();
+    const idleTabs = new Set();
+
+    const isWindowFocused = focusedWindowId !== null && focusedWindowId !== chrome.windows.WINDOW_ID_NONE;
+
+    for (const tab of tabs) {
+        const hostname = getHostname(tab.url);
+        if (!hostname || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) continue;
+
+        if (tab.audible) audibleTabs.add(hostname);
+
+        const isActive = isWindowFocused && tab.active && tab.windowId === focusedWindowId;
+        if (isActive) continue;
+
+        const lastActiveAt = tabLastActiveAt.get(tab.id);
+        if (lastActiveAt && now - lastActiveAt >= IDLE_TAB_THRESHOLD_MS) {
+            idleTabs.add(hostname);
+        }
+    }
+
+    return {
+        audibleTabs: Array.from(audibleTabs),
+        idleTabs: Array.from(idleTabs),
+    };
 }
 
 function ensureHourlyArrays(domainData) {
@@ -264,13 +396,20 @@ function addElapsedToHourly(domainData, startTs, endTs, isActive) {
 }
 
 function pruneOldData() {
-    if (!statsCache.dates) { statsCache.dates = {}; return; }
+    if (!statsCache.dates) {
+        statsCache.dates = {};
+        return false;
+    }
     const dates = Object.keys(statsCache.dates);
-    if (dates.length <= MAX_DAYS_STORED) return;
+    if (dates.length <= MAX_DAYS_STORED) return false;
     dates.sort();
+    let changed = false;
     for (let i = 0; i < dates.length - MAX_DAYS_STORED; i++) {
         delete statsCache.dates[dates[i]];
+        changed = true;
     }
+    if (changed) statsDirty = true;
+    return changed;
 }
 
 
@@ -378,7 +517,7 @@ async function settleTabTime(url, isActive, isNewVisit = false, nowOverride = nu
         }
     }
     
-    if (isChanged) saveStatsDebounced();
+    if (isChanged) markStatsDirty();
 }
 
 // 현재 활성 탭의 시간을 강제로 정산 (탭 전환, 창 전환 시 호출)
@@ -394,10 +533,10 @@ async function settlePreviousTab(nowOverride = null) {
 }
 
 // 1분 주기 배치 처리 (모든 탭의 lastTrackedTime을 현 시간으로 끌어올림)
-async function trackAllTabsBatch() {
+async function trackAllTabsBatch(nowOverride = null) {
     await loadStatsCache();
     const tabs = await chrome.tabs.query({});
-    const now = Date.now();
+    const now = typeof nowOverride === 'number' ? nowOverride : Date.now();
     let isChanged = false;
     const items = await chrome.storage.local.get('blockedUrls');
     
@@ -416,7 +555,7 @@ async function trackAllTabsBatch() {
         }
     }
     
-    if (isChanged) saveStatsDebounced();
+    if (isChanged) markStatsDirty();
 }
 
 // ... (maybeTriggerNudge, sendFrictionMessage 등 기존 동일) ...
@@ -462,15 +601,17 @@ async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
 async function sendFrictionMessage(tabId, url) {
     if (!url || url.startsWith('chrome://')) return;
     const items = await chrome.storage.local.get({
-        blockedUrls: [], filterSettings: DEFAULT_FILTER_SETTINGS, schedule: { scheduleActive: false }
+        blockedUrls: [], schedule: { scheduleActive: false }
     });
+    const filterSettings = await dataManager.getFilterSettings();
     const hostname = getHostname(url);
     const shouldApply = hostname && items.blockedUrls.includes(hostname) && isFrictionTime(items.schedule);
+    const filters = materializeFilterSettings(filterSettings || DEFAULT_FILTER_SETTINGS);
 
     try {
         await chrome.tabs.sendMessage(tabId, {
             isBlocked: shouldApply,
-            filters: mergeFilterSettings(items.filterSettings),
+            filters,
         });
     } catch (e) {}
 
@@ -497,65 +638,42 @@ async function checkScheduleStatus() {
 // ===========================================================
 
 // [1] 통합 알람 (심장 박동)
-chrome.alarms.onAlarm.addListener(async (alarm) => {
+chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'oneMinuteTick') {
-        const now = Date.now();
-        const dateStr = getLocalDateStr(now);
-
-        console.group('💓 1분 통합 정산 (${new Date(now).toLocaleTimeString()})');
-        
-        // 1. 불안 엔진 처리
-        try { await processAnxietyTick(dateStr); } catch (e) { console.error("AnxietyTick Error:", e); }
-        
-        // 2. 시간 추적 배치 처리
-        try { await trackAllTabsBatch(); } catch (e) { console.error("TrackBatch Error:", e); }
-        
-        // 3. 스케줄 및 넛지
-        try { await checkScheduleStatus(); } catch (e) { /* ignore */ }
-        
-        if (lastActiveTabId !== null) {
-            try {
-                const tab = await chrome.tabs.get(lastActiveTabId);
-                if (tab?.url) await maybeTriggerNudge(lastActiveTabId, tab.url);
-            } catch (e) {}
-        }
-        console.groupEnd();
+        runTick('alarm').catch(() => {});
     }
 });
 
 // [2] 탭 활성화 (사용자가 탭을 클릭함)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const now = Date.now();
-    
-    // 1. 이전 탭 시간 정산 (아주 중요)
+
     await settlePreviousTab(now);
 
-    // 2. 윈도우 포커스 확인
     if (focusedWindowId !== null && activeInfo.windowId !== focusedWindowId) {
-        // 다른 윈도우의 탭을 클릭했더라도, 포커스 ID를 맞춰줌
         focusedWindowId = activeInfo.windowId;
     }
 
-    // 3. 불안 엔진 지표 수집
     if (activeInfo.tabId !== lastActiveTabId) {
         if (lastActiveTabId && tabEntryTimes.has(lastActiveTabId)) {
             const stayDuration = now - tabEntryTimes.get(lastActiveTabId);
             if (stayDuration < SHORT_DWELL_THRESHOLD) {
-                if (anxietyBuffer.min1) anxietyBuffer.min1.dwellTime++;
+                currentTickBuffer.metrics.shortDwells += 1;
             }
         }
-        if (anxietyBuffer.min1) anxietyBuffer.min1.tabSwitches++;
+        currentTickBuffer.metrics.tabSwitches += 1;
     }
 
-    // 4. 새 탭 추적 시작
     lastActiveTabId = activeInfo.tabId;
+    tabLastActiveAt.set(activeInfo.tabId, now);
+
     try {
         const tab = await chrome.tabs.get(activeInfo.tabId);
         if (tab && tab.url) {
             tabEntryTimes.set(activeInfo.tabId, now);
+            updateActiveTabInfo(tab, now);
             await sendFrictionMessage(tab.id, tab.url);
-            // 진입 시점 기록 (isNewVisit=false, 단순 전환)
-            await settleTabTime(tab.url, false, false, now); 
+            await settleTabTime(tab.url, false, false, now);
             await maybeTriggerNudge(tab.id, tab.url);
         }
     } catch (e) {}
@@ -564,121 +682,119 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // [3] 윈도우 포커스 변경 (이게 빠져서 그동안 정확도가 낮았음)
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
     const now = Date.now();
-    
-    // 1. 포커스 잃기 전 탭 정산
+
     await settlePreviousTab(now);
 
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
-        // 브라우저가 포커스를 잃음 (다른 앱 사용 중)
+        recordActiveTabDuration(now);
         focusedWindowId = null;
-        // lastActiveTabId는 null로 만들지 않음 (돌아왔을 때 대비)
-        // 대신 trackAllTabsBatch에서 focusedWindowId가 null이면 active 계산을 안 함
-    } else {
-        // 브라우저로 돌아옴
-        focusedWindowId = windowId;
-        try {
-            const win = await chrome.windows.get(windowId, { populate: true });
-            const activeTab = win.tabs.find(t => t.active);
-            if (activeTab) {
-                lastActiveTabId = activeTab.id;
-                if (activeTab.url) {
-                    await sendFrictionMessage(activeTab.id, activeTab.url);
-                    await settleTabTime(activeTab.url, true, false, now); // Active 상태로 기록 재개
-                    await maybeTriggerNudge(activeTab.id, activeTab.url);
-                }
+        if (activeTabInfo) activeTabInfo.startedAt = null;
+        return;
+    }
+
+    focusedWindowId = windowId;
+    try {
+        const win = await chrome.windows.get(windowId, { populate: true });
+        const activeTab = win.tabs.find((t) => t.active);
+        if (activeTab) {
+            lastActiveTabId = activeTab.id;
+            tabLastActiveAt.set(activeTab.id, now);
+            if (activeTab.url) {
+                updateActiveTabInfo(activeTab, now);
+                await sendFrictionMessage(activeTab.id, activeTab.url);
+                await settleTabTime(activeTab.url, true, false, now);
+                await maybeTriggerNudge(activeTab.id, activeTab.url);
             }
-        } catch (e) { console.error(e); }
+        }
+    } catch (e) {
+        console.error(e);
     }
 });
 
-// [4] 탭 업데이트 (URL 변경 등)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    // 로딩 시작 시 체류시간 체크
+    const now = Date.now();
+
     if (changeInfo.status === 'loading' && tab.url) {
         if (tabEntryTimes.has(tabId)) {
-            const stayDuration = Date.now() - tabEntryTimes.get(tabId);
-            if (stayDuration < SHORT_DWELL_THRESHOLD && anxietyBuffer.min1) {
-                anxietyBuffer.min1.dwellTime++;
+            const stayDuration = now - tabEntryTimes.get(tabId);
+            if (stayDuration < SHORT_DWELL_THRESHOLD) {
+                currentTickBuffer.metrics.shortDwells += 1;
             }
             tabEntryTimes.delete(tabId);
         }
-        if (anxietyBuffer.min1) anxietyBuffer.min1.pageLoads++;
+        currentTickBuffer.metrics.pageLoads += 1;
     }
 
-    // 로딩 완료 시 시간 추적 시작
     if (changeInfo.status === 'complete' && tab.url) {
-        tabEntryTimes.set(tabId, Date.now());
+        tabEntryTimes.set(tabId, now);
         const isForegroundActive = focusedWindowId !== null ? (tab.active && tab.windowId === focusedWindowId) : false;
-        
+
         await sendFrictionMessage(tabId, tab.url);
-        await settleTabTime(tab.url, isForegroundActive, true); // isNewVisit=true
-        
+        await settleTabTime(tab.url, isForegroundActive, true);
+
         if (isForegroundActive) {
             lastActiveTabId = tabId;
+            tabLastActiveAt.set(tabId, now);
+            updateActiveTabInfo(tab, now);
             await maybeTriggerNudge(tabId, tab.url);
         }
     }
 });
 
-// [5] 탭 닫힘
 chrome.tabs.onRemoved.addListener((tabId) => {
-    // 체류 시간 체크
     if (tabEntryTimes.has(tabId)) {
         const stayDuration = Date.now() - tabEntryTimes.get(tabId);
-        if (stayDuration < SHORT_DWELL_THRESHOLD && anxietyBuffer.min1) {
-            anxietyBuffer.min1.dwellTime++;
+        if (stayDuration < SHORT_DWELL_THRESHOLD) {
+            currentTickBuffer.metrics.shortDwells += 1;
         }
         tabEntryTimes.delete(tabId);
     }
-    // 닫힌 탭이 활성 탭이었다면? 
-    // 이미 onActivated(다른 탭)나 onFocusChanged가 처리했을 가능성이 높음
+
+    tabLastActiveAt.delete(tabId);
+    if (activeTabInfo?.tabId === tabId) {
+        recordActiveTabDuration(Date.now());
+        activeTabInfo = { tabId: null, hostname: null, startedAt: null };
+    }
 });
 
-// [6] 메시지 핸들러
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!request) return false;
 
-    // 1. 불안도 지표 수집 (즉시 처리)
-    if (request.type === "TRACK_ANXIETY") {
-        const metric = request.metric;
-        if (anxietyBuffer.min1 && anxietyBuffer.min1[metric] !== undefined) {
-            anxietyBuffer.min1[metric]++;
-        }
-        // 응답이 필요 없는 단순 수집이므로 false
-        return false; 
+    if (request.type === 'TRACK_BEHAVIOR_EVENT') {
+        recordBehaviorEvent(request.event);
+        return false;
     }
 
     const action = request.action || request.type;
 
-    // 2. 디버그용: 현재 캐시 데이터 확인 (즉시 응답)
-    if (action === "DEBUG_GET_CACHE") {
-        sendResponse({ 
-            cache: statsCache, 
-            loaded: cacheLoaded, 
-            lastActiveTab: lastActiveTabId, 
-            focusedWin: focusedWindowId 
+    if (action === 'DEBUG_GET_CACHE') {
+        sendResponse({
+            cache: statsCache,
+            loaded: cacheLoaded,
+            lastActiveTab: lastActiveTabId,
+            focusedWin: focusedWindowId,
         });
         return false;
     }
 
-    // 3. 디버그용: 통계 초기화 (비동기 처리)
-    if (action === "DEBUG_RESET_STATS") {
-        loadStatsCache().then(async () => {
-            statsCache = { dates: {} };
-            await chrome.storage.local.set({ stats: statsCache });
-            sendResponse({ success: true });
-        }).catch(err => sendResponse({ success: false, error: err.message }));
-        return true; // async 응답 대기
-    }
-
-    // 4. 디버그용: 강제 저장 (비동기 처리)
-    if (action === "DEBUG_FORCE_SAVE") {
-        saveStatsCache().then(() => sendResponse({ success: true }));
+    if (action === 'DEBUG_RESET_STATS') {
+        loadStatsCache()
+            .then(async () => {
+                statsCache = { dates: {}, analysisLogs: [] };
+                await dataManager.setStats(statsCache);
+                statsDirty = false;
+                sendResponse({ success: true });
+            })
+            .catch((err) => sendResponse({ success: false, error: err.message }));
         return true;
     }
 
-    // 5. 넛지 확인 처리 (NUDGE_ACK)
-    if (action === "NUDGE_ACK") {
+    if (action === 'DEBUG_FORCE_SAVE') {
+        saveStatsCache({ force: true }).then(() => sendResponse({ success: true }));
+        return true;
+    }
+
+    if (action === 'NUDGE_ACK') {
         const key = request.key;
         if (key) {
             markNudgeAck(key).then(() => sendResponse({ success: true }));
@@ -688,139 +804,120 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return false;
     }
 
-    // 6. 대시보드 데이터 요청 (DASHBOARD 연동 시 필수)
-    if (action === "GET_DASHBOARD_DATA") {
+    if (action === 'GET_DASHBOARD_DATA') {
         loadStatsCache().then(() => {
-            sendResponse({ 
-                success: true, 
-                stats: statsCache, 
-                engine: {
-                    currentScore: anxietyWindow.length > 0 ? anxietyWindow[anxietyWindow.length-1].s : 0,
-                    activeMinutes: activeMinutesInHour
-                }
+            sendResponse({
+                success: true,
+                stats: statsCache,
             });
         });
         return true;
     }
 
-    // 7. 차단 설정 업데이트 브로드캐스트 요청
-    if (action === "REFRESH_SETTINGS") {
+    if (action === 'REFRESH_SETTINGS') {
         broadcastSettingsUpdate().then(() => sendResponse({ success: true }));
         return true;
     }
 
-    // 정의되지 않은 액션이 들어온 경우 채널을 닫아줌
     return false;
 });
 
 // ===========================================================
-// 5. 불안 엔진 (Anxiety Engine) - 수정됨
+// 5. Tick + analysis
 // ===========================================================
 
-async function processAnxietyTick(dateStr) {
-    await loadStatsCache();
+let tickInFlight = false;
+let tickIntervalId = null;
 
-    const now = new Date();
-    const currentMinMetrics = { ...anxietyBuffer.min1 };
-    
-    const score = calculateAnxietyScore(currentMinMetrics);
-    const level = getInterventionLevel(score);
-
-    console.groupCollapsed(`🧠 Anxiety Engine: Score ${score} (${level})`);
-    console.log("Metrics:", currentMinMetrics);
-    console.groupEnd();
-
-    anxietyWindow.push({ t: now.getTime(), m: currentMinMetrics, s: score });
-    if (anxietyWindow.length > MAX_WINDOW_SIZE) anxietyWindow.shift();
-
-    for (const key in currentMinMetrics) {
-        hourlyAnxietyAccumulator[key] += currentMinMetrics[key];
+function resetTickBuffer(now = Date.now()) {
+    currentTickBuffer = createEmptyTickBuffer();
+    currentTickBuffer.startTs = now;
+    if (activeTabInfo && activeTabInfo.hostname && idleState === 'active') {
+        activeTabInfo.startedAt = now;
     }
-    
-    // [중요] 실제 활성 시간은 여기서 단순 ++ 하지 않고, 
-    // trackAllTabsBatch 결과나 별도 로직으로 보정할 수도 있지만, 
-    // 일단 엔진 자체의 '가동 시간'으로 보고 유지합니다.
-    activeMinutesInHour++;
-
-    if (now.getMinutes() === 0 || (now.getTime() - lastHourlyRecordTime > 3600000)) {
-        await saveHourlyAnxietyStats(dateStr, now.getHours());
-        lastHourlyRecordTime = now.getTime();
-    }
-
-    if (level === 'CRITICAL') {
-        await saveAnxietyEventToStorage(dateStr, "SYSTEM_AUTO_DETECT");
-        applyFriction(level);
-    }
-
-    anxietyBuffer.min1 = createEmptyMetrics();
-    // saveStatsCache는 trackAllTabsBatch 이후에 어차피 호출되므로 여기서 굳이 중복 호출 안 해도 됨
 }
 
-async function saveHourlyAnxietyStats(dateStr, hour) {
-    if (activeMinutesInHour === 0) return;
-    if (!statsCache.dates[dateStr]) statsCache.dates[dateStr] = { domains: {} };
-    if (!statsCache.dates[dateStr].hourlyAnxiety) statsCache.dates[dateStr].hourlyAnxiety = {};
+async function runTick(source = 'interval') {
+    const now = Date.now();
+    if (tickInFlight) return;
+    if (lastTickAt && now - lastTickAt < TRACKING_INTERVAL_MS * 0.5) return;
+    tickInFlight = true;
+    lastTickAt = now;
 
-    const normalizationFactor = 60 / activeMinutesInHour;
-    const normalizedMetrics = {};
-    for (const key in hourlyAnxietyAccumulator) {
-        normalizedMetrics[key] = hourlyAnxietyAccumulator[key] * normalizationFactor;
+    try {
+        await loadStatsCache();
+        recordActiveTabDuration(now);
+
+        await trackAllTabsBatch(now);
+        await checkScheduleStatus();
+
+        const filterSettings = await dataManager.getFilterSettings();
+        const focusTab = buildFocusTabSnapshot();
+        const backgroundContext = await buildBackgroundContext(now);
+        const appliedFriction = buildAppliedFrictionSnapshot(filterSettings);
+
+        if (!Array.isArray(statsCache.analysisLogs)) statsCache.analysisLogs = [];
+        statsCache.analysisLogs.push({
+            ts: now,
+            dateStr: getLocalDateStr(now),
+            focusTab,
+            backgroundContext,
+            appliedFriction,
+        });
+        statsDirty = true;
+
+        maybePurgeAnalysisLogs(now);
+
+        if (lastActiveTabId !== null) {
+            try {
+                const tab = await chrome.tabs.get(lastActiveTabId);
+                if (tab?.url) await maybeTriggerNudge(lastActiveTabId, tab.url);
+            } catch (_) {}
+        }
+
+        await saveStatsCache();
+    } catch (e) {
+        console.error('Tick Error:', e);
+    } finally {
+        resetTickBuffer(now);
+        tickInFlight = false;
     }
-
-    statsCache.dates[dateStr].hourlyAnxiety[hour] = {
-        rawMetrics: { ...hourlyAnxietyAccumulator },
-        normalizedMetrics: normalizedMetrics,
-        activeMinutes: activeMinutesInHour,
-        avgScore: calculateAnxietyScore(normalizedMetrics)
-    };
-
-    hourlyAnxietyAccumulator = createEmptyMetrics();
-    activeMinutesInHour = 0;
-    await saveStatsCache();
 }
 
-async function saveAnxietyEventToStorage(dateStr, triggerSource) {
-    if (anxietyWindow.length === 0) return;
-    if (!statsCache.dates[dateStr]) statsCache.dates[dateStr] = { domains: {} };
-    if (!statsCache.dates[dateStr].anxietyEvents) statsCache.dates[dateStr].anxietyEvents = [];
-
-    statsCache.dates[dateStr].anxietyEvents.push({
-        eventTimestamp: Date.now(),
-        trigger: triggerSource,
-        history: JSON.parse(JSON.stringify(anxietyWindow)) 
-    });
-    await saveStatsCache();
-}
-
-function applyFriction(level) {
-    console.warn(`[Intervention] Level: ${level} - FRICTION APPLIED`);
+function startTickTimer() {
+    if (tickIntervalId) return;
+    tickIntervalId = setInterval(() => {
+        runTick('interval').catch(() => {});
+    }, TRACKING_INTERVAL_MS);
 }
 
 // ===========================================================
-// 6. 초기화 (Initialization) - 중요!
+// 6. Init
 // ===========================================================
 
-// 서비스 워커 시작 시 무조건 실행되어 현재 상태를 파악함
 async function init() {
     await loadStatsCache();
     ensureAlarm();
+    startTickTimer();
     setupIdleDetection();
 
     try {
         const win = await chrome.windows.getLastFocused({ populate: true });
         if (win && win.id !== chrome.windows.WINDOW_ID_NONE) {
             focusedWindowId = win.id;
-            const activeTab = win.tabs?.find(t => t.active);
+            const activeTab = win.tabs?.find((t) => t.active);
             if (activeTab) {
+                const now = Date.now();
                 lastActiveTabId = activeTab.id;
-                // 서비스 워커 재시작 시점부터 시간 추적 재개
-                settleTabTime(activeTab.url, true, false, Date.now());
+                tabLastActiveAt.set(activeTab.id, now);
+                updateActiveTabInfo(activeTab, now);
+                settleTabTime(activeTab.url, true, false, now);
             }
         } else {
             focusedWindowId = null;
         }
     } catch (e) {
-        console.log("초기 윈도우 포커스 확인 실패 (브라우저가 닫혀있을 수 있음)");
+        console.log('Init: focused window lookup failed');
     }
 }
 

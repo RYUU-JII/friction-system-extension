@@ -2,7 +2,7 @@
 
 :root {
   --f-blur: 0px;
-  --f-desat: 0%;
+  --f-saturation: 1;
   --f-delay: 0s;
   --f-letter-spacing: normal;
   --f-text-blur: 0px;
@@ -72,9 +72,10 @@ html[data-friction-visual="1"] :is(
   ytd-reel-video-renderer,
   .ytp-videowall-still
 )[style*="background-image"] {
-  filter: blur(var(--f-blur)) grayscale(var(--f-desat)) !important;
+  filter: blur(var(--f-blur)) saturate(var(--f-saturation)) !important;
   transition: filter 0.1s ease;
-  will-change: filter;
+  will-change: filter, transform;
+  transform: translateZ(0);
 }
 
 /**
@@ -83,7 +84,9 @@ html[data-friction-visual="1"] :is(
 html[data-friction-visual="1"] [data-friction-visual-target="1"] :is(
   img, picture, canvas, video, [role="img"], [style*="background-image"]
 ) {
-  filter: blur(var(--f-blur)) grayscale(var(--f-desat)) !important;
+  filter: blur(var(--f-blur)) saturate(var(--f-saturation)) !important;
+  will-change: filter, transform;
+  transform: translateZ(0);
 }
 
 /**
@@ -103,6 +106,8 @@ html[data-friction-letter-spacing="1"] [data-friction-text-layout] {
  */
 html[data-friction-text-active="1"] [data-friction-text-visual] {
   transition: filter 0.15s ease, text-shadow 0.15s ease, opacity 0.15s ease;
+  will-change: filter, opacity, text-shadow, transform;
+  transform: translateZ(0);
 }
 
 html[data-friction-text-blur="1"] [data-friction-text-visual] {

@@ -4,6 +4,19 @@ class DataManager {
   constructor() {
     this.local = chrome?.storage?.local;
     this.session = chrome?.storage?.session;
+    this.filterSettingsCache = null;
+    this._onChangedBound = null;
+
+    if (this.local && chrome?.storage?.onChanged) {
+      this._onChangedBound = (changes, areaName) => {
+        if (areaName !== 'local') return;
+        if (changes.filterSettings) {
+          this.filterSettingsCache =
+            changes.filterSettings.newValue || { ...CONFIG_DEFAULT_FILTER_SETTINGS };
+        }
+      };
+      chrome.storage.onChanged.addListener(this._onChangedBound);
+    }
   }
 
   static getInstance() {
@@ -49,12 +62,16 @@ class DataManager {
   }
 
   async getFilterSettings() {
+    if (this.filterSettingsCache) return this.filterSettingsCache;
     const items = await this.getLocal({ filterSettings: CONFIG_DEFAULT_FILTER_SETTINGS });
-    return items.filterSettings || { ...CONFIG_DEFAULT_FILTER_SETTINGS };
+    const next = items.filterSettings || { ...CONFIG_DEFAULT_FILTER_SETTINGS };
+    this.filterSettingsCache = next;
+    return next;
   }
 
   setFilterSettings(filterSettings) {
-    return this.setLocal({ filterSettings: filterSettings || CONFIG_DEFAULT_FILTER_SETTINGS });
+    this.filterSettingsCache = filterSettings || CONFIG_DEFAULT_FILTER_SETTINGS;
+    return this.setLocal({ filterSettings: this.filterSettingsCache });
   }
 
   async getSchedule() {
@@ -67,12 +84,34 @@ class DataManager {
   }
 
   async getStats() {
-    const items = await this.getLocal({ stats: { dates: {} } });
-    return items.stats || { dates: {} };
+    const items = await this.getLocal({ stats: { dates: {}, analysisLogs: [] } });
+    const stats = items.stats || { dates: {}, analysisLogs: [] };
+    if (!stats.dates || typeof stats.dates !== 'object') stats.dates = {};
+    if (!Array.isArray(stats.analysisLogs)) stats.analysisLogs = [];
+    return stats;
   }
 
   setStats(stats) {
-    return this.setLocal({ stats: stats || { dates: {} } });
+    const next = stats || { dates: {}, analysisLogs: [] };
+    if (!next.dates || typeof next.dates !== 'object') next.dates = {};
+    if (!Array.isArray(next.analysisLogs)) next.analysisLogs = [];
+    return this.setLocal({ stats: next });
+  }
+
+  async purgeOldLogs(days = 7) {
+    const spanDays = Number.isFinite(Number(days)) ? Math.max(1, Number(days)) : 7;
+    const cutoff = Date.now() - spanDays * 24 * 60 * 60 * 1000;
+    const stats = await this.getStats();
+    const logs = Array.isArray(stats.analysisLogs) ? stats.analysisLogs : [];
+    const filtered = logs.filter((entry) => {
+      const ts = Number(entry?.ts ?? entry?.timestamp ?? entry?.time);
+      if (!Number.isFinite(ts)) return true;
+      return ts >= cutoff;
+    });
+    if (filtered.length === logs.length) return stats;
+    const nextStats = { ...stats, analysisLogs: filtered };
+    await this.setStats(nextStats);
+    return nextStats;
   }
 
   async getEngineState() {

@@ -6,7 +6,7 @@ import TextShuffleManager from './textShuffleManager.js';
 import InputDelayManager from './inputDelayManager.js';
 import InteractionManager from './interactionManager.js';
 import NudgeGame from './nudgeGame.js';
-import AnxietySensor from './anxietySensor.js';
+import BehaviorSensor from './behaviorSensor.js';
 import VideoSkipManager from './videoSkipManager.js';
 
 function clearAllFriction() {
@@ -84,5 +84,5 @@ export function initFrictionController() {
     return false;
   });
 
-  AnxietySensor.init();
+  BehaviorSensor.init();
 }

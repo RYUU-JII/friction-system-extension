@@ -1,17 +1,17 @@
-import { sendAnxietyMetric } from './telemetry.js';
+import { sendBehaviorEvent } from './telemetry.js';
 
-const AnxietySensor = {
-  send(metric) {
-    sendAnxietyMetric(metric);
+const BehaviorSensor = {
+  send(name, payload) {
+    sendBehaviorEvent(name, payload);
   },
 
   init() {
-    document.addEventListener('mousedown', () => this.send('clicks'), true);
+    document.addEventListener('mousedown', () => this.send('click'), true);
 
     document.addEventListener(
       'keydown',
       (e) => {
-        if (e.key === 'Backspace') this.send('backspaces');
+        if (e.key === 'Backspace') this.send('backspace');
       },
       true
     );
@@ -19,8 +19,9 @@ const AnxietySensor = {
     document.addEventListener(
       'mouseup',
       () => {
-        const selection = window.getSelection().toString();
-        if (selection.length > 0) this.send('dragCount');
+        const selection = window.getSelection?.();
+        const text = selection ? selection.toString() : '';
+        if (text.length > 0) this.send('drag');
       },
       true
     );
@@ -33,11 +34,11 @@ const AnxietySensor = {
         if (e.target.tagName !== 'VIDEO') return;
         const video = e.target;
         if (video?.dataset?.frictionSkipReverting === '1') return;
-        this.send('videoSkips');
+        this.send('videoSkip');
       },
       true
     );
   },
 };
 
-export default AnxietySensor;
+export default BehaviorSensor;

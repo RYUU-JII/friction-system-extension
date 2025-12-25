@@ -1,7 +1,7 @@
 import { getSiteSelectors } from '../../shared/config/sites.js';
 import { ROOT_STATE_ATTRS } from './constants.js';
 import { setRootAttribute } from './dom.js';
-import { sendAnxietyMetric } from './telemetry.js';
+import { sendBehaviorEvent } from './telemetry.js';
 
 const state = {
   clickDelayTime: 0,
@@ -145,9 +145,13 @@ const InteractionManager = {
     state.scrollAccumulator.x += e.deltaX;
     state.scrollAccumulator.y += e.deltaY;
 
-    const wheelIntensity = Math.abs(e.deltaY);
+    const deltaX = e.deltaX || 0;
+    const deltaY = e.deltaY || 0;
+    sendBehaviorEvent('scroll', { deltaX, deltaY, deltaMode: e.deltaMode });
+
+    const wheelIntensity = Math.abs(deltaY);
     if (wheelIntensity > 200) {
-      sendAnxietyMetric('scrollSpikes');
+      sendBehaviorEvent('scrollSpike', { delta: wheelIntensity });
     }
 
     if (state.scrollTimer) clearTimeout(state.scrollTimer);
