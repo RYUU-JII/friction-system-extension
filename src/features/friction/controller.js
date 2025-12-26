@@ -1,6 +1,5 @@
 import VisualManager from './visualManager.js';
 import SocialMetricsManager from './socialMetricsManager.js';
-import DelayManager from './delayManager.js';
 import TextManager from './textManager.js';
 import TextShuffleManager from './textShuffleManager.js';
 import InputDelayManager from './inputDelayManager.js';
@@ -12,7 +11,6 @@ import VideoSkipManager from './videoSkipManager.js';
 function clearAllFriction() {
   VisualManager.remove();
   SocialMetricsManager.remove();
-  DelayManager.remove();
   TextManager.remove();
   TextShuffleManager.disable();
   InputDelayManager.remove();
@@ -62,9 +60,6 @@ export function initFrictionController() {
 
     VisualManager.update(filters);
     SocialMetricsManager.update(filters.socialEngagement, filters.socialExposure);
-
-    if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
-    else DelayManager.remove();
 
     if (filters.inputDelay?.isActive) InputDelayManager.apply(filters.inputDelay.value);
     else InputDelayManager.remove();

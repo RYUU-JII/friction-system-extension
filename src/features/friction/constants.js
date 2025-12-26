@@ -1,6 +1,5 @@
 export const ROOT_ATTRS = {
   VISUAL: 'data-friction-visual',
-  DELAY: 'data-friction-delay',
   LETTER_SPACING: 'data-friction-letter-spacing',
   TEXT_ACTIVE: 'data-friction-text-active',
   TEXT_BLUR: 'data-friction-text-blur',

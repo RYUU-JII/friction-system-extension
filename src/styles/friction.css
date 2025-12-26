@@ -3,7 +3,6 @@
 :root {
   --f-blur: 0px;
   --f-saturation: 1;
-  --f-delay: 0s;
   --f-letter-spacing: normal;
   --f-text-blur: 0px;
   --f-text-shadow: none;
@@ -92,10 +91,6 @@ html[data-friction-visual="1"] [data-friction-visual-target="1"] :is(
 /**
  * 4. 인터랙티브 및 텍스트 레이아웃
  */
-html[data-friction-delay="1"] [data-friction-interactive] {
-  transition: all var(--f-delay) ease !important;
-}
-
 html[data-friction-letter-spacing="1"] [data-friction-text-layout] {
   letter-spacing: var(--f-letter-spacing) !important;
   transition: letter-spacing 0.3s ease;

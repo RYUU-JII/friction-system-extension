@@ -38,7 +38,17 @@ function resolveAssetUrl(path) {
 }
 
 const ADVANCED_TIER = 'advanced';
+const EXPERIMENTAL_TIER = 'experimental';
+const SETTINGS_EXPERIMENTAL_KEY = 'settingsShowExperimental';
 const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
+
+function isExperimentalSettingsEnabled() {
+  try {
+    return localStorage.getItem(SETTINGS_EXPERIMENTAL_KEY) === '1';
+  } catch (_) {
+    return false;
+  }
+}
 
 function formatStepDisplay(key, step) {
   const clamped = clampFilterStep(step);
@@ -180,7 +190,6 @@ const SETTING_METADATA_V2 = {
     order: 20,
     helper: '조회수/업로드 시간 등 노출·신선도 지표를 숨깁니다.',
   },
-  delay: { label: '반응 지연', control: 'range', type: 'number', unit: 's', unitSuffix: 's', storage: 'secondsCss', category: 'delay', tier: 'advanced', order: 40, placeholder: '0.5', min: '0', max: '2.0', step: '0.1' },
   clickDelay: {
     label: 'Click Delay',
     control: 'range',
@@ -211,7 +220,7 @@ const SETTING_METADATA_V2 = {
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('scrollFriction', inputValue),
   },
-  inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: 'advanced', order: 30, placeholder: '120', min: '0', max: '500', step: '10' },
+  inputDelay: { label: '입력 지연', control: 'range', type: 'number', unit: 'ms', unitSuffix: 'ms', storage: 'ms', category: 'delay', tier: EXPERIMENTAL_TIER, order: 30, placeholder: '120', min: '0', max: '500', step: '10' },
 };
 
 function pickRandom(arr) {
@@ -996,8 +1005,10 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       UI.settingsGrid.appendChild(section);
     }
 
+    const showExperimental = isExperimentalSettingsEnabled();
     const entries = Object.entries(SETTING_METADATA_V2)
       .filter(([, meta]) => meta.category === currentSettingsSubtab)
+      .filter(([, meta]) => meta?.tier !== EXPERIMENTAL_TIER || showExperimental)
       .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
 
     const settings = getSettings() || {};

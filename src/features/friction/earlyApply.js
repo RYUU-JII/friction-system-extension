@@ -3,7 +3,6 @@ import { CONFIG_DEFAULT_FILTER_SETTINGS, materializeFilterSettings } from '../..
 import { isFrictionTime, getHostname } from '../../shared/utils/index.js';
 import VisualManager from './visualManager.js';
 import SocialMetricsManager from './socialMetricsManager.js';
-import DelayManager from './delayManager.js';
 import TextManager from './textManager.js';
 import TextShuffleManager from './textShuffleManager.js';
 import InputDelayManager from './inputDelayManager.js';
@@ -28,7 +27,6 @@ export async function earlyApplyFriction() {
   const filters = materializeFilterSettings(items.filterSettings || {});
   TextManager.update(filters);
   TextShuffleManager.update(filters.textShuffle);
-  if (filters.delay?.isActive) DelayManager.apply(filters.delay.value);
   if (filters.inputDelay?.isActive) InputDelayManager.apply(filters.inputDelay.value);
   if (filters.clickDelay?.isActive) InteractionManager.applyClickDelay(filters.clickDelay.value);
   if (filters.scrollFriction?.isActive) InteractionManager.applyScroll(filters.scrollFriction.value);
