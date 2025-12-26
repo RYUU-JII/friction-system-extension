@@ -198,19 +198,71 @@ body.dark .preview-text {
     font-size: 13px;
 }
 .setting-card {
+    --level-1: #22c55e;
+    --level-2: #f59e0b;
+    --level-3: #ef4444;
+
+    --setting-card-inner-x: 0px;
+
+    --range-accent: var(--accent);
+    --range-progress: 0%;
+    --range-track-rest: color-mix(in srgb, var(--border-color) 45%, var(--bg-main));
+    --range-track-fill: color-mix(in srgb, var(--range-accent) 30%, var(--bg-main));
+    --range-tick: color-mix(in srgb, var(--text-muted) 70%, transparent);
+
     background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 20px;
+}
+.setting-card.is-stepped {
+    --setting-card-inner-x: 12px;
 }
 .setting-card.is-disabled {
     opacity: 0.8;
 }
 .setting-header {
     display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
+    padding-inline: var(--setting-card-inner-x);
+}
+.setting-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
 }
 .setting-header label { font-weight: 600; color: var(--text-main); }
+.setting-header-left label {
+    font-size: 15px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+}
+.setting-level-badge {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--border-color) 25%, transparent);
+    border: 1px solid var(--border-color);
+    user-select: none;
+    flex-shrink: 0;
+}
+.setting-card.is-stepped:not(.is-disabled) .setting-level-badge {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--range-accent) 60%, var(--border-color));
+    background: color-mix(in srgb, var(--range-accent) 16%, var(--bg-main));
+}
+.setting-card.is-disabled .setting-level-badge {
+    background: transparent;
+    border-style: dashed;
+}
 .setting-control {
     display: flex;
     align-items: center;
     gap: 12px;
+    padding-inline: var(--setting-card-inner-x);
 }
 .setting-helper {
     font-size: 12px;
@@ -220,23 +272,156 @@ body.dark .preview-text {
 .setting-card.is-toggle-only .setting-control {
     padding-top: 2px;
 }
-.input-range {
+.setting-range-wrap {
     width: 100%;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.setting-range-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+.setting-card.is-stepped .setting-range-row {
+    padding: 0;
+    border-radius: 999px;
+    border: 0;
+    background: transparent;
+}
+.setting-card.is-stepped.is-disabled .setting-range-row {
+    background: transparent;
+}
+.input-range {
+    flex: 1;
+    min-width: 0;
     padding: 0;
     border: none;
     background: transparent;
     border-radius: 0;
 }
 .setting-output {
-    min-width: 86px;
-    text-align: right;
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);
     font-weight: 700;
+    min-width: 86px;
+    text-align: right;
 }
-.input-value {
+.setting-range-row .setting-output {
+    min-width: 118px;
+    text-align: center;
+    color: var(--text-main);
+    font-weight: 800;
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    white-space: nowrap;
+}
+.setting-card.is-stepped:not(.is-disabled) .setting-range-row .setting-output {
+    border-color: color-mix(in srgb, var(--range-accent) 60%, var(--border-color));
+    background: color-mix(in srgb, var(--range-accent) 14%, var(--bg-main));
+}
+.setting-card.is-disabled .setting-output {
+    color: var(--text-muted);
+}
+.setting-card.is-disabled .setting-range-row .setting-output {
+    background: transparent;
+    border-style: dashed;
+}
+.input-value:not(.input-range) {
     padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); color: var(--text-main);
+}
+.input-value.input-range {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* Discrete slider styling (stepped) */
+.setting-card.is-stepped .input-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 36px;
+    cursor: pointer;
+    overflow: visible;
+}
+.setting-card.is-disabled .input-range {
+    cursor: not-allowed;
+}
+.setting-card.is-stepped .input-range:focus {
+    outline: none;
+}
+.setting-card.is-stepped .input-range:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--range-accent) 30%, transparent),
+        0 8px 18px rgba(0, 0, 0, 0.18);
+}
+.setting-card.is-stepped .input-range::-webkit-slider-runnable-track {
+    height: 20px;
+    border-radius: 999px;
+    background:
+        linear-gradient(
+            90deg,
+            var(--range-track-fill) 0%,
+            var(--range-track-fill) var(--range-progress),
+            var(--range-track-rest) var(--range-progress),
+            var(--range-track-rest) 100%
+        ),
+        linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent calc(50% - 1px),
+            color-mix(in srgb, var(--border-color) 85%, transparent) calc(50% - 1px),
+            color-mix(in srgb, var(--border-color) 85%, transparent) calc(50% + 1px),
+            transparent calc(50% + 1px),
+            transparent 100%
+        );
+    border: 0;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--range-accent) 45%, var(--border-color));
+}
+.setting-card.is-stepped .input-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-top: 0px;
+    background: color-mix(in srgb, var(--range-accent) 12%, var(--bg-main));
+    border: 2px solid var(--range-accent);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+.setting-card.is-disabled .input-range::-webkit-slider-thumb {
+    border-color: var(--border-color);
+}
+
+/* Firefox fallback */
+.setting-card.is-stepped .input-range::-moz-range-track {
+    height: 20px;
+    border-radius: 999px;
+    background: var(--range-track-rest);
+    border: 0;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--range-accent) 45%, var(--border-color));
+}
+.setting-card.is-stepped .input-range::-moz-range-progress {
+    height: 20px;
+    border-radius: 999px;
+    background: var(--range-track-fill);
+}
+.setting-card.is-stepped .input-range::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--range-accent) 12%, var(--bg-main));
+    border: 2px solid var(--range-accent);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 /* Toggle Switch */
 .switch { position: relative; display: inline-block; width: 48px; height: 26px; }
