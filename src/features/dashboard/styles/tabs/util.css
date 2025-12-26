@@ -1,0 +1,37 @@
+/* Util Tab Styles */
+.util-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.util-setting-text {
+    min-width: 0;
+}
+
+.util-setting-desc {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.util-setting-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.util-setting-status {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.util-setting-card.is-on .util-setting-status {
+    color: var(--accent);
+}
+

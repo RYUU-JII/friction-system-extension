@@ -14,6 +14,7 @@
         <button class="nav-btn" data-tab="detailed-recap"><span>▤</span> Detailed Recap</button>
         <button class="nav-btn" data-tab="blocklist"><span>⊘</span> 차단 관리</button>
         <button class="nav-btn" data-tab="settings"><span>⚙</span> 필터 설정</button>
+        <button class="nav-btn" data-tab="util"><span>+</span> 유틸</button>
         <button class="nav-btn" data-tab="schedule"><span>⊙</span> 스케줄</button>
       </nav>
       <div class="sidebar-footer">
@@ -161,15 +162,14 @@
       <section id="settings" class="tab-content">
         <header>
           <h1>필터 설정</h1>
-          <p>미디어/텍스트/지연 필터를 분리해서 원하는 강도로 조절해 보세요.</p>
+          <p>단순 필터(미디어/텍스트/딜레이/기타)를 원하는 강도로 조절해 보세요.</p>
         </header>
 
         <div class="card settings-subtabs" role="tablist" aria-label="필터 설정 분류" style="margin-bottom: 16px">
           <button type="button" class="settings-subtab-btn is-active" data-settings-subtab="media" role="tab" aria-selected="true">미디어 필터</button>
           <button type="button" class="settings-subtab-btn" data-settings-subtab="text" role="tab" aria-selected="false">텍스트 필터</button>
-          <button type="button" class="settings-subtab-btn" data-settings-subtab="delay" role="tab" aria-selected="false">지연 필터</button>
+          <button type="button" class="settings-subtab-btn" data-settings-subtab="delay" role="tab" aria-selected="false">딜레이 필터</button>
           <button type="button" class="settings-subtab-btn" data-settings-subtab="misc" role="tab" aria-selected="false">기타</button>
-          <button type="button" class="settings-subtab-btn" data-settings-subtab="game" role="tab" aria-selected="false">게임 테스트</button>
         </div>
 
         <div class="card settings-preview" id="settingsPreview" style="margin-bottom: 16px">
@@ -191,7 +191,32 @@
           </div>
         </div>
 
-        <div class="card is-hidden" id="nudgeDebugPanel" style="margin-bottom: 16px">
+        <div class="settings-grid" id="settingsGrid"></div>
+      </section>
+
+      <section id="util" class="tab-content">
+        <header>
+          <h1>유틸</h1>
+          <p>단순 필터를 넘어, 더 구체적이고 능동적인 교정 기능들을 모아둡니다.</p>
+        </header>
+
+        <div class="card util-setting-card" id="utilVideoSkipGuardCard" style="margin-bottom: 16px">
+          <div class="util-setting-row">
+            <div class="util-setting-text">
+              <h3 style="margin: 0">비디오 스킵 제한</h3>
+              <p class="util-setting-desc">영상에서 앞으로 점프하려면 스킵권이 필요하게 됩니다. 스킵권은 시간에 따라 충전됩니다.</p>
+            </div>
+            <div class="util-setting-control">
+              <label class="switch">
+                <input type="checkbox" id="utilVideoSkipGuardToggle" />
+                <span class="slider"></span>
+              </label>
+              <span class="util-setting-status" id="utilVideoSkipGuardStatus">OFF</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="nudgeDebugPanel" style="margin-bottom: 16px">
           <div class="settings-preview-header" style="margin-bottom: 10px">
             <div class="settings-preview-title">
               <h3 style="margin: 0">게임(개입) 테스트</h3>
@@ -257,8 +282,6 @@
             <span id="nudgeDebugStatus" class="nudge-debug-status"></span>
           </div>
         </div>
-
-        <div class="settings-grid" id="settingsGrid"></div>
       </section>
 
       <section id="schedule" class="tab-content">
