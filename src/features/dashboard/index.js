@@ -3,6 +3,7 @@ import { createOverviewTab } from './tabs/overviewTab.js';
 import { createDetailedRecapTab } from './tabs/detailedRecapTab.js';
 import { createBlocklistTab } from './tabs/blocklistTab.js';
 import { createSettingsTab } from './tabs/settingsTab.js';
+import { createUtilTab } from './tabs/utilTab.js';
 import { createScheduleTab } from './tabs/scheduleTab.js';
 
 const DASHBOARD_ACTIVE_TAB_KEY = 'dashboardActiveTab';
@@ -17,6 +18,7 @@ let overviewTab = null;
 let detailedRecapTab = null;
 let blocklistTab = null;
 let settingsTab = null;
+let utilTab = null;
 let scheduleTab = null;
 
 const UI = {};
@@ -88,12 +90,16 @@ function initDOMReferences() {
   UI.newBlockUrlInput = document.getElementById('newBlockUrl');
   UI.addBlockBtn = document.getElementById('addBlockBtn');
 
-  UI.settingsGrid = document.querySelector('.settings-grid');
+  UI.settingsGrid = document.getElementById('settingsGrid');
   UI.settingsSubtabButtons = document.querySelectorAll('.settings-subtab-btn');
   UI.settingsPreview = document.getElementById('settingsPreview');
   UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
   UI.previewBefore = document.getElementById('previewBefore');
   UI.previewAfter = document.getElementById('previewAfter');
+
+  UI.utilVideoSkipGuardCard = document.getElementById('utilVideoSkipGuardCard');
+  UI.utilVideoSkipGuardToggle = document.getElementById('utilVideoSkipGuardToggle');
+  UI.utilVideoSkipGuardStatus = document.getElementById('utilVideoSkipGuardStatus');
 
   UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
   UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');
@@ -174,6 +180,9 @@ async function renderActiveTab() {
     case 'settings':
       await settingsTab?.display();
       break;
+    case 'util':
+      await utilTab?.display();
+      break;
     case 'schedule':
       scheduleTab?.display();
       break;
@@ -223,6 +232,13 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     mergeFilterSettings,
   });
+  utilTab = createUtilTab({
+    UI,
+    getSettings: () => currentSettings,
+    setSettings: (next) => {
+      currentSettings = next;
+    },
+  });
   scheduleTab = createScheduleTab({
     UI,
     getSchedule: () => currentSchedule,
@@ -235,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
   detailedRecapTab.setup();
   blocklistTab.setup();
   settingsTab.setup();
+  utilTab.setup();
   scheduleTab.setup();
 
   loadDataAndRender();

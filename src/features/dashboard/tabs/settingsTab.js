@@ -24,11 +24,6 @@ const SETTINGS_PREVIEW_MEDIA_VARIANTS = [
   },
 ];
 
-const DEFAULT_NUDGE_AUTO_CONFIG = {
-  enabled: false,
-  thresholdMs: 30 * 60 * 1000,
-};
-
 function resolveAssetUrl(path) {
   if (!path) return '';
   if (typeof chrome !== 'undefined' && chrome?.runtime?.getURL) {
@@ -81,18 +76,6 @@ function formatStepPhysicalValue(key, step) {
 }
 
 const SETTING_METADATA_V2 = {
-  videoSkipGuard: {
-    label: '비디오 스킵 제한',
-    control: 'toggle',
-    type: 'boolean',
-    unit: '',
-    unitSuffix: '',
-    storage: 'raw',
-    category: 'media',
-    tier: 'advanced',
-    order: 5,
-    helper: '영상에서 앞으로 점프하려면 스킵권이 필요하게됨. 스킵권은 시간에 따라 충전됨.'
-  },
   blur: {
     label: '블러',
     control: 'range',
@@ -408,62 +391,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     } catch (_) {}
   }
 
-  function normalizeNudgeAutoConfig(raw) {
-    const src = raw && typeof raw === 'object' ? raw : {};
-    const enabled = typeof src.enabled === 'boolean' ? src.enabled : DEFAULT_NUDGE_AUTO_CONFIG.enabled;
-    const thresholdMsRaw = Number(src.thresholdMs);
-    const thresholdMs = Number.isFinite(thresholdMsRaw) ? Math.max(0, thresholdMsRaw) : DEFAULT_NUDGE_AUTO_CONFIG.thresholdMs;
-    return { enabled, thresholdMs };
-  }
-
-  function minutesFromMs(ms) {
-    const n = Number(ms);
-    if (!Number.isFinite(n)) return 30;
-    return Math.max(5, Math.min(240, Math.round(n / 60000)));
-  }
-
-  function syncNudgeAutoUI(config) {
-    if (!UI.nudgeAutoToggle || !UI.nudgeAutoThresholdRange) return;
-
-    UI.nudgeAutoToggle.checked = !!config.enabled;
-
-    const minutes = minutesFromMs(config.thresholdMs);
-    UI.nudgeAutoThresholdRange.value = String(minutes);
-    UI.nudgeAutoThresholdRange.disabled = !config.enabled;
-
-    if (UI.nudgeAutoToggleOutput) UI.nudgeAutoToggleOutput.textContent = config.enabled ? 'ON' : 'OFF';
-    if (UI.nudgeAutoThresholdOutput) UI.nudgeAutoThresholdOutput.textContent = `${minutes}분`;
-  }
-
-  async function loadNudgeAutoConfigAndSyncUI() {
-    const items = await storageGet({ nudgeConfig: {} });
-    const config = normalizeNudgeAutoConfig(items.nudgeConfig);
-    syncNudgeAutoUI(config);
-    return config;
-  }
-
-  async function updateNudgeAutoConfig(patch) {
-    const items = await storageGet({ nudgeConfig: {} });
-    const current = normalizeNudgeAutoConfig(items.nudgeConfig);
-
-    const enabled = typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled;
-    const thresholdMsRaw = patch && patch.thresholdMs !== undefined ? Number(patch.thresholdMs) : current.thresholdMs;
-    const thresholdMs = Number.isFinite(thresholdMsRaw) ? Math.max(0, thresholdMsRaw) : current.thresholdMs;
-
-    const next = {
-      ...(items.nudgeConfig && typeof items.nudgeConfig === 'object' ? items.nudgeConfig : {}),
-      enabled,
-      thresholdMs,
-    };
-
-    await storageSet({ nudgeConfig: next });
-    chrome.runtime.sendMessage({ action: 'NUDGE_CONFIG_UPDATED' });
-
-    const normalized = normalizeNudgeAutoConfig(next);
-    syncNudgeAutoUI(normalized);
-    return normalized;
-  }
-
   function ensurePreviewAudioEl() {
     if (settingsPreviewAudioEl) return settingsPreviewAudioEl;
     if (!UI.settingsPreview) return null;
@@ -543,8 +470,9 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       const step = clampFilterStep(parseInt(String(raw), 10) || 0) || 1;
       const nonZeroStep = step <= 0 ? 1 : step;
       card.dataset.step = String(nonZeroStep);
-      card.style.setProperty('--range-accent', isActive ? `var(--level-${nonZeroStep})` : 'var(--border-color)');
-      card.style.setProperty('--range-progress', isActive ? `${((nonZeroStep - 1) / 2) * 100}%` : '0%');
+      const mutedAccent = `color-mix(in srgb, var(--level-${nonZeroStep}) 35%, var(--border-color))`;
+      card.style.setProperty('--range-accent', isActive ? `var(--level-${nonZeroStep})` : mutedAccent);
+      card.style.setProperty('--range-progress', `${((nonZeroStep - 1) / 2) * 100}%`);
 
       if (levelBadge) {
         const physical = formatStepPhysicalValue(key, nonZeroStep) || '';
@@ -611,15 +539,8 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     });
   }
 
-  function applySettingsSubtabVisibility() {
-    const isGame = currentSettingsSubtab === 'game';
-    if (UI.nudgeDebugPanel) UI.nudgeDebugPanel.classList.toggle('is-hidden', !isGame);
-    if (UI.settingsPreview) UI.settingsPreview.classList.toggle('is-hidden', isGame);
-    if (UI.settingsGrid) UI.settingsGrid.classList.toggle('is-hidden', isGame);
-  }
-
   function setActiveSettingsSubtabV2(next) {
-    const nextTab = next === 'text' || next === 'delay' || next === 'misc' || next === 'game' ? next : 'media';
+    const nextTab = next === 'text' || next === 'delay' || next === 'misc' ? next : 'media';
     if (currentSettingsSubtab === nextTab) return;
 
     collectSettingsFromGridV2();
@@ -627,141 +548,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     if (currentSettingsSubtab !== 'media') fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
     syncSettingsSubtabUI();
     display();
-  }
-
-  function syncNudgeDebugOutputs() {
-    const size = parseInt(UI.nudgeSizeRange?.value || '96', 10) || 96;
-    const speed = parseInt(UI.nudgeSpeedRange?.value || '140', 10) || 140;
-    const interval = parseInt(UI.nudgeSpawnIntervalRange?.value || '4000', 10) || 4000;
-    const maxSprites = parseInt(UI.nudgeMaxSpritesRange?.value || '6', 10) || 6;
-    const ramp = parseFloat(UI.nudgeSpeedRampRange?.value || '1.15') || 1.15;
-
-    if (UI.nudgeSizeOutput) UI.nudgeSizeOutput.textContent = `${size}px`;
-    if (UI.nudgeSpeedOutput) UI.nudgeSpeedOutput.textContent = `${speed}`;
-    if (UI.nudgeSpawnIntervalOutput) UI.nudgeSpawnIntervalOutput.textContent = `${interval}ms`;
-    if (UI.nudgeMaxSpritesOutput) UI.nudgeMaxSpritesOutput.textContent = `${maxSprites}`;
-    if (UI.nudgeSpeedRampOutput) UI.nudgeSpeedRampOutput.textContent = `${ramp.toFixed(2)}x`;
-  }
-
-  function getNudgeDebugConfigFromUI() {
-    const size = parseInt(UI.nudgeSizeRange?.value || '96', 10) || 96;
-    const speed = parseInt(UI.nudgeSpeedRange?.value || '140', 10) || 140;
-    const interval = parseInt(UI.nudgeSpawnIntervalRange?.value || '4000', 10) || 4000;
-    const maxSprites = parseInt(UI.nudgeMaxSpritesRange?.value || '6', 10) || 6;
-    const ramp = parseFloat(UI.nudgeSpeedRampRange?.value || '1.15') || 1.15;
-
-    return {
-      spriteSizePx: size,
-      baseSpeedPxPerSec: speed,
-      spawnIntervalMs: interval,
-      maxSprites,
-      speedRamp: ramp,
-      asset: {
-        gifPath: 'samples/images/nudge-object.gif',
-        audioPath: 'samples/sounds/nudge-music.mp3',
-        label: 'nudge-object',
-      },
-      message: {
-        title: '잠깐!',
-        body: '늘 차단 중이에요. 무례했거나 불편함으로 돌아가세요.',
-      },
-    };
-  }
-
-  function setNudgeDebugStatus(text) {
-    if (UI.nudgeDebugStatus) UI.nudgeDebugStatus.textContent = text || '';
-  }
-
-  function getLastActiveTabId() {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: 'DEBUG_GET_CACHE' }, (resp) => {
-        resolve(resp?.lastActiveTab ?? null);
-      });
-    });
-  }
-
-  function getTab(tabId) {
-    return new Promise((resolve) => {
-      chrome.tabs.get(tabId, (tab) => resolve(tab || null));
-    });
-  }
-
-  function queryTabs(queryInfo) {
-    return new Promise((resolve) => {
-      chrome.tabs.query(queryInfo, (tabs) => resolve(Array.isArray(tabs) ? tabs : []));
-    });
-  }
-
-  function isWebUrl(url) {
-    return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
-  }
-
-  async function resolveTargetTabId() {
-    const lastId = await getLastActiveTabId();
-    if (typeof lastId === 'number') {
-      const tab = await getTab(lastId);
-      if (tab && isWebUrl(tab.url)) return lastId;
-    }
-
-    const tabs = await queryTabs({ lastFocusedWindow: true });
-    const candidate = tabs.find((t) => isWebUrl(t.url));
-    return candidate?.id ?? null;
-  }
-
-  async function sendNudgeDebugMessage(message) {
-    const tabId = await resolveTargetTabId();
-    if (!tabId) {
-      setNudgeDebugStatus('탭을 찾지 못했어요.');
-      return;
-    }
-
-    const trySend = () =>
-      new Promise((resolve) => {
-        chrome.tabs.sendMessage(tabId, message, () => {
-          const err = chrome.runtime.lastError?.message;
-          resolve(err || null);
-        });
-      });
-
-    const tryInject = () =>
-      new Promise((resolve) => {
-        chrome.scripting.executeScript(
-          {
-            target: { tabId },
-            files: ['entries/content/earlyApplyLoader.js', 'entries/content/loader.js'],
-          },
-          () => {
-            const err = chrome.runtime.lastError?.message;
-            resolve(err || null);
-          }
-        );
-      });
-
-    const err1 = await trySend();
-    if (!err1) {
-      setNudgeDebugStatus(`전송 완료 (tabId: ${tabId})`);
-      return;
-    }
-
-    if (String(err1).includes('Receiving end does not exist')) {
-      setNudgeDebugStatus('콘텐츠스크립트가 아직 주입 중입니다...');
-      const injectErr = await tryInject();
-      if (injectErr) {
-        setNudgeDebugStatus(`주입 실패: ${injectErr}`);
-        return;
-      }
-
-      const err2 = await trySend();
-      if (err2) {
-        setNudgeDebugStatus(`전송 실패: ${err2}`);
-        return;
-      }
-
-      setNudgeDebugStatus(`전송 완료 (주입 후) (tabId: ${tabId})`);
-      return;
-    }
-
-    setNudgeDebugStatus(`전송 실패: ${err1}`);
   }
 
   function ensurePreviewMediaVariant() {
@@ -1109,61 +895,10 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       });
     }
 
-    if (UI.nudgeDebugPanel) {
-      if (UI.nudgeAutoToggle && UI.nudgeAutoThresholdRange) {
-        UI.nudgeAutoToggle.addEventListener('change', async () => {
-          const enabled = !!UI.nudgeAutoToggle.checked;
-          const next = await updateNudgeAutoConfig({ enabled });
-          setNudgeDebugStatus(`자동 개입: ${next.enabled ? 'ON' : 'OFF'}`);
-        });
-
-        UI.nudgeAutoThresholdRange.addEventListener('input', () => {
-          const minutes = parseInt(String(UI.nudgeAutoThresholdRange.value || '30'), 10) || 30;
-          if (UI.nudgeAutoThresholdOutput) UI.nudgeAutoThresholdOutput.textContent = `${minutes}분`;
-        });
-
-        UI.nudgeAutoThresholdRange.addEventListener('change', async () => {
-          const minutes = parseInt(String(UI.nudgeAutoThresholdRange.value || '30'), 10) || 30;
-          const next = await updateNudgeAutoConfig({ thresholdMs: minutes * 60 * 1000 });
-          setNudgeDebugStatus(`자동 개입 기준: ${minutesFromMs(next.thresholdMs)}분`);
-        });
-      }
-
-      const syncAndPush = () => {
-        syncNudgeDebugOutputs();
-        if (currentSettingsSubtab !== 'game') return;
-        const config = getNudgeDebugConfigFromUI();
-        sendNudgeDebugMessage({ type: 'NUDGE_DEBUG_CONFIG', payload: { config } }).catch(() => {});
-      };
-
-      UI.nudgeSizeRange?.addEventListener('input', syncAndPush);
-      UI.nudgeSpeedRange?.addEventListener('input', syncAndPush);
-      UI.nudgeSpawnIntervalRange?.addEventListener('input', syncAndPush);
-      UI.nudgeMaxSpritesRange?.addEventListener('input', syncAndPush);
-      UI.nudgeSpeedRampRange?.addEventListener('input', syncAndPush);
-
-      UI.nudgeSpawnBtn?.addEventListener('click', () => {
-        syncNudgeDebugOutputs();
-        const config = getNudgeDebugConfigFromUI();
-        sendNudgeDebugMessage({ type: 'NUDGE_DEBUG_SPAWN', payload: { config } }).catch(() => {});
-      });
-
-      UI.nudgeStopBtn?.addEventListener('click', () => {
-        sendNudgeDebugMessage({ type: 'NUDGE_STOP' }).catch(() => {});
-      });
-    }
   }
 
   async function display() {
     syncSettingsSubtabUI();
-    applySettingsSubtabVisibility();
-
-    if (currentSettingsSubtab === 'game') {
-      syncNudgeDebugOutputs();
-      // 미리보기 최신 설정 반영
-      await loadNudgeAutoConfigAndSyncUI();
-      return;
-    }
 
     displaySettingsV2();
     await updateSettingsPreviewV2();
