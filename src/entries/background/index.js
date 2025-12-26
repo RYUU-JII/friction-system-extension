@@ -896,7 +896,13 @@ async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
 
     const items = await chrome.storage.local.get({
         blockedUrls: [],
-        schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
+        schedule: {
+          scheduleActive: false,
+          days: [0, 1, 2, 3, 4, 5, 6],
+          blocks: [{ startMin: 0, endMin: 1440 }],
+          startMin: 0,
+          endMin: 1440,
+        },
         nudgeConfig: {},
     });
 
@@ -925,7 +931,14 @@ async function maybeTriggerNudge(tabId, url, { force = false } = {}) {
 async function sendFrictionMessage(tabId, url) {
     if (!url || url.startsWith('chrome://')) return;
     const items = await chrome.storage.local.get({
-        blockedUrls: [], schedule: { scheduleActive: false }
+        blockedUrls: [],
+        schedule: {
+          scheduleActive: false,
+          days: [0, 1, 2, 3, 4, 5, 6],
+          blocks: [{ startMin: 0, endMin: 1440 }],
+          startMin: 0,
+          endMin: 1440,
+        },
     });
     const filterSettings = await dataManager.getFilterSettings();
     const hostname = getHostname(url);
@@ -948,7 +961,15 @@ async function broadcastSettingsUpdate() {
 }
 
 async function checkScheduleStatus() {
-    const items = await chrome.storage.local.get({ schedule: { scheduleActive: false } });
+    const items = await chrome.storage.local.get({
+      schedule: {
+        scheduleActive: false,
+        days: [0, 1, 2, 3, 4, 5, 6],
+        blocks: [{ startMin: 0, endMin: 1440 }],
+        startMin: 0,
+        endMin: 1440,
+      },
+    });
     const isCurrentlyActive = isFrictionTime(items.schedule);
     const session = await chrome.storage.session.get('lastScheduleState');
     if (session.lastScheduleState !== isCurrentlyActive) {

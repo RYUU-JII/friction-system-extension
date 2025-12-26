@@ -1,68 +1,328 @@
 /* schedule.css */
-.schedule-panel { margin-bottom: 24px; }
+.schedule-panel {
+    margin-bottom: 16px;
+}
+
+#schedule-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.schedule-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.schedule-toggle-text h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.schedule-toggle-text p {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.schedule-summary {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-main);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.schedule-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.schedule-panel-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.schedule-panel-desc {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+
+.schedule-day-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.schedule-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.chip {
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    color: var(--text-main);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.chip:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-main));
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.chip.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+
+body.dark .chip.is-active {
+    color: #1a1c1e;
+}
+
+.chip-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+
+.chip-primary:hover {
+    background: var(--accent-hover);
+}
+
+body.dark .chip-primary {
+    color: #1a1c1e;
+}
+
+.chip-subtle {
+    background: transparent;
+}
+
+.schedule-presets {
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.schedule-presets-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.schedule-presets-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.schedule-presets-help {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
 
 .time-slider-container {
-    padding: 40px 30px; 
-    background: var(--card-bg); 
-    border-radius: var(--radius-lg); 
+    padding: 30px;
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
 }
 
 .time-display {
-    display: flex; 
-    justify-content: center; 
-    gap: 12px;
-    margin-bottom: 24px;
-    font-family: 'Inter', sans-serif; /* 숫자 가독성 */
-    font-size: 20px; 
-    font-weight: 700; 
-    color: var(--accent);
-    background: var(--bg-main); /* 시간 표시 배경 추가 */
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    width: fit-content;
-    margin-left: auto;
-    margin-right: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin: 18px 0 16px;
 }
 
-.time-display .separator { color: var(--text-muted); opacity: 0.5; }
+.time-display-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--bg-main);
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.time-display .separator {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+.time-display-note {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--border-color) 35%, var(--bg-main));
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 3px 8px;
+    display: none;
+}
+
+.time-display-note.is-visible {
+    display: inline-flex;
+}
+
+.time-inputs {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.time-input {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.time-input input {
+    min-width: 110px;
+    padding: 9px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.time-input input::placeholder {
+    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+}
+
+.time-input input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 
 .slider-track-wrapper {
     position: relative;
-    height: 32px;
-    margin-bottom: 10px;
+    height: 46px;
+    margin-bottom: 8px;
 }
 
-.slider-track { 
-    background: var(--bg-main); 
-    height: 8px; 
-    border-radius: 4px; 
-    position: absolute; 
-    top: 12px; 
-    left: 0; 
-    right: 0; 
-    border: 1px solid var(--border-color); /* 트랙에 테두리 추가 */
+.slider-track {
+    background: var(--bg-main);
+    height: 8px;
+    border-radius: 4px;
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    border: 1px solid var(--border-color);
 }
 
-.slider-range { 
-    position: absolute; 
-    top: 13px; /* border 고려하여 위치 조정 */
-    height: 6px; 
-    /* 그라데이션 대신 단색 Accent 사용 */
-    background: var(--accent); 
-    border-radius: 4px; 
+.slider-ticks {
+    position: absolute;
+    top: 12px;
+    left: 0;
+    right: 0;
+    height: 22px;
+    --tick: calc(100% / 24);
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(var(--tick) - 1px),
+        color-mix(in srgb, var(--border-color) 70%, transparent) calc(var(--tick) - 1px),
+        color-mix(in srgb, var(--border-color) 70%, transparent) var(--tick)
+    );
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.slider-blocks {
+    position: absolute;
+    top: 21px;
+    left: 0;
+    right: 0;
+    height: 6px;
+}
+
+.slider-block {
+    position: absolute;
+    height: 6px;
+    padding: 0;
+    appearance: none;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 28%, var(--bg-main));
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-color));
+    cursor: pointer;
+}
+
+.slider-block:hover {
+    background: color-mix(in srgb, var(--accent) 38%, var(--bg-main));
+}
+
+.slider-block:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.slider-range {
+    position: absolute;
+    top: 21px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 4px;
     opacity: 0.9;
 }
 
-.slider-handle { 
+.slider-range-secondary {
+    opacity: 0;
+}
+
+.slider-handle {
     position: absolute;
-    top: 16px; /* 트랙 중앙 정렬 */
-    width: 24px; 
-    height: 24px; 
-    border: 2px solid var(--card-bg); 
-    background: var(--text-main); /* 핸들을 흰색/밝은회색으로 강조 */
+    top: 24px;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--card-bg);
+    background: var(--text-main);
     border-radius: 50%;
     transform: translate(-50%, -50%);
     cursor: grab;
@@ -71,11 +331,106 @@
 }
 
 .slider-handle:hover {
-    transform: translate(-50%, -50%) scale(1.1);
+    transform: translate(-50%, -50%) scale(1.08);
     background: var(--accent);
 }
 
 .slider-handle:active {
     cursor: grabbing;
     background: var(--accent);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+    padding: 0 2px;
+}
+
+.schedule-block-list {
+    display: grid;
+    gap: 10px;
+}
+
+.schedule-block-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.schedule-block-select {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-main);
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.schedule-block-row.is-active .schedule-block-select {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-main));
+}
+
+.schedule-block-name {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.schedule-block-time {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.schedule-block-badge {
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--btn-neutral-bg);
+    border: 1px solid var(--btn-neutral-border);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+}
+
+.schedule-block-remove {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-fg);
+    border: 1px solid var(--btn-danger-border);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.schedule-block-remove:hover {
+    background: var(--btn-danger-hover);
+}
+
+.schedule-block-remove:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+    .schedule-toggle-row,
+    .schedule-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .time-inputs {
+        justify-content: flex-start;
+    }
 }

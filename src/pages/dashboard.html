@@ -291,30 +291,102 @@
         </header>
 
         <div class="card schedule-panel">
-          <label class="switch-label" style="display: flex; justify-content: space-between; align-items: center">
-            <span>스케줄 기반 필터 활성화</span>
+          <div class="schedule-toggle-row">
+            <div class="schedule-toggle-text">
+              <h3>스케줄 기반 필터</h3>
+              <p>요일과 시간 블록을 지정하면 선택된 시간에만 마찰 필터가 작동합니다.</p>
+            </div>
             <label class="switch">
               <input type="checkbox" id="schedule-toggle" />
               <span class="slider"></span>
             </label>
-          </label>
+          </div>
+          <div class="schedule-summary" id="schedule-summary"></div>
         </div>
 
-        <div class="card time-slider-container" id="time-slider-container">
-          <div class="time-display">
-            <span id="start-time-display">00:00</span>
-            <span class="separator">~</span>
-            <span id="end-time-display">24:00</span>
+        <div id="schedule-controls">
+          <div class="card schedule-days-panel">
+            <div class="schedule-panel-header">
+              <div>
+                <h3 class="schedule-panel-title">활성 요일</h3>
+                <p class="schedule-panel-desc">필터가 작동할 요일을 골라주세요.</p>
+              </div>
+              <div class="schedule-day-actions">
+                <button type="button" class="chip chip-subtle" data-day-preset="weekday">주중</button>
+                <button type="button" class="chip chip-subtle" data-day-preset="weekend">주말</button>
+                <button type="button" class="chip chip-subtle" data-day-preset="all">매일</button>
+              </div>
+            </div>
+            <div class="schedule-days" id="schedule-days">
+              <button type="button" class="chip day-chip" data-day="0">일</button>
+              <button type="button" class="chip day-chip" data-day="1">월</button>
+              <button type="button" class="chip day-chip" data-day="2">화</button>
+              <button type="button" class="chip day-chip" data-day="3">수</button>
+              <button type="button" class="chip day-chip" data-day="4">목</button>
+              <button type="button" class="chip day-chip" data-day="5">금</button>
+              <button type="button" class="chip day-chip" data-day="6">토</button>
+            </div>
           </div>
-          <div class="slider-track-wrapper">
-            <div class="slider-track"></div>
-            <div class="slider-range" id="slider-range"></div>
-            <div class="slider-handle" id="handle-start"></div>
-            <div class="slider-handle" id="handle-end"></div>
+
+          <div class="card time-slider-container" id="time-slider-container">
+            <div class="schedule-panel-header">
+              <div>
+                <h3 class="schedule-panel-title">시간 블록</h3>
+                <p class="schedule-panel-desc">여러 개의 블록을 추가하고 선택해서 조정하세요.</p>
+              </div>
+              <button type="button" class="chip chip-primary" id="add-schedule-block">+ 블록 추가</button>
+            </div>
+
+            <div class="schedule-presets">
+              <span class="schedule-presets-label">프리셋</span>
+              <div class="schedule-presets-row" id="schedule-presets">
+                <button type="button" class="chip preset-chip" data-start="540" data-end="720">집중 09:00–12:00</button>
+                <button type="button" class="chip preset-chip" data-start="1080" data-end="1320">저녁 18:00–22:00</button>
+                <button type="button" class="chip preset-chip" data-start="1380" data-end="420">수면 23:00–07:00</button>
+                <button type="button" class="chip preset-chip" data-start="0" data-end="1440">하루 종일</button>
+              </div>
+              <p class="schedule-presets-help">선택된 블록에 적용됩니다.</p>
+            </div>
+
+            <div class="time-display">
+              <div class="time-display-main">
+                <span id="start-time-display">00:00</span>
+                <span class="separator">~</span>
+                <span id="end-time-display">24:00</span>
+              </div>
+              <span class="time-display-note" id="schedule-span-note"></span>
+            </div>
+            <div class="time-inputs">
+              <label class="time-input">
+                <span>시작</span>
+                <input type="text" id="start-time-input" placeholder="HH:MM" inputmode="numeric" />
+              </label>
+              <label class="time-input">
+                <span>종료</span>
+                <input type="text" id="end-time-input" placeholder="HH:MM" inputmode="numeric" />
+              </label>
+            </div>
+
+            <div class="slider-track-wrapper">
+              <div class="slider-track"></div>
+              <div class="slider-ticks"></div>
+              <div class="slider-blocks" id="slider-blocks"></div>
+              <div class="slider-range" id="slider-range"></div>
+              <div class="slider-range slider-range-secondary" id="slider-range-secondary"></div>
+              <div class="slider-handle" id="handle-start"></div>
+              <div class="slider-handle" id="handle-end"></div>
+            </div>
+            <div class="slider-labels">
+              <span>00</span>
+              <span>06</span>
+              <span>12</span>
+              <span>18</span>
+              <span>24</span>
+            </div>
+
+            <div class="schedule-block-list" id="schedule-block-list"></div>
           </div>
         </div>
-
-        
       </section>
     </div>
 

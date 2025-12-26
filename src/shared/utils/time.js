@@ -43,7 +43,25 @@ export function isFrictionTime(schedule) {
   }
 
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const { startMin, endMin } = schedule;
+
+  const isMinuteInBlock = (block) => {
+    const startMin = Number.isFinite(block?.startMin) ? block.startMin : null;
+    const endMin = Number.isFinite(block?.endMin) ? block.endMin : null;
+    if (startMin === null || endMin === null) return false;
+    if (startMin === endMin) return false;
+    if (startMin > endMin) {
+      return currentMinutes >= startMin || currentMinutes < endMin;
+    }
+    return currentMinutes >= startMin && currentMinutes < endMin;
+  };
+
+  const blocks = Array.isArray(schedule.blocks) ? schedule.blocks : [];
+  if (blocks.length > 0) {
+    return blocks.some((block) => isMinuteInBlock(block));
+  }
+
+  const startMin = Number.isFinite(schedule.startMin) ? schedule.startMin : 0;
+  const endMin = Number.isFinite(schedule.endMin) ? schedule.endMin : 1440;
 
   if (startMin > endMin) {
     return currentMinutes >= startMin || currentMinutes < endMin;
