@@ -107,6 +107,7 @@ function initDOMReferences() {
   UI.utilVideoSkipGuardToggle = document.getElementById('utilVideoSkipGuardToggle');
   UI.utilVideoSkipGuardStatus = document.getElementById('utilVideoSkipGuardStatus');
 
+  UI.scheduleSection = document.getElementById('schedule');
   UI.nudgeDebugPanel = document.getElementById('nudgeDebugPanel');
   UI.nudgeSpawnBtn = document.getElementById('nudgeSpawnBtn');
   UI.nudgeStopBtn = document.getElementById('nudgeStopBtn');
@@ -136,8 +137,6 @@ function initDOMReferences() {
   UI.dayPresetButtons = document.querySelectorAll('#schedule [data-day-preset]');
   UI.schedulePresets = document.getElementById('schedule-presets');
   UI.addBlockBtn = document.getElementById('add-schedule-block');
-  UI.displayStart = document.getElementById('start-time-display');
-  UI.displayEnd = document.getElementById('end-time-display');
   UI.scheduleSpanNote = document.getElementById('schedule-span-note');
   UI.startInput = document.getElementById('start-time-input');
   UI.endInput = document.getElementById('end-time-input');
