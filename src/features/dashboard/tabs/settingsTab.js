@@ -116,21 +116,20 @@ const SETTING_METADATA_V2 = {
     displayValue: (inputValue) => formatStepDisplay('letterSpacing', inputValue),
   },
   textOpacity: {
-    label: 'Text Opacity',
+    label: '글자 투명도',
     control: 'range',
     type: 'number',
     unit: '',
     unitSuffix: '',
     storage: 'step',
     category: 'text',
-    tier: 'advanced',
-    order: 50,
+    tier: 'basic',
+    order: 20,
     min: '0',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('textOpacity', inputValue),
   },
-  textBlur: { label: '텍스트 블러', control: 'range', type: 'number', unit: 'px', unitSuffix: 'px', storage: 'cssUnit', category: 'text', tier: 'basic', order: 20, placeholder: '0.3', min: '0', max: '3', step: '0.1' },
   textShadow: { label: '텍스트 그림자', control: 'text', type: 'text', unit: '', unitSuffix: '', storage: 'raw', category: 'text', tier: 'advanced', order: 30, placeholder: '예: 0 1px 0 rgba(0,0,0,0.25)' },
   textShuffle: {
     label: '텍스트 셔플 강도',
@@ -903,7 +902,6 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
         if (Number.isFinite(opacity)) after.style.opacity = String(opacity);
       }
       if (settings?.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
-      if (settings?.textBlur?.isActive) after.style.filter = `blur(${settings.textBlur.value})`;
 
       UI.previewBefore.appendChild(before);
       UI.previewAfter.appendChild(after);

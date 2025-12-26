@@ -2,14 +2,17 @@
 :root {
     /* 폰트는 유지하되 노르딕 느낌을 위해 자간을 살짝 좁힘 */
     font-size: 16px;
+    --sidebar-width: 260px;
+    --layout-gap: 40px;
+    --main-max-width: 800px;
+    --main-shift-x: -70px;
 }
 
 body {
-    display: flex; 
+    display: block;
     min-height: 100vh;
     margin: 0;
-    padding: 18px;
-    gap: 18px;
+    padding: 18px 18px 18px calc(18px + var(--sidebar-width) + var(--layout-gap));
     background: var(--bg-main);
     color: var(--text-main);
     font-family: 'Pretendard', -apple-system, sans-serif;
@@ -18,9 +21,10 @@ body {
 
 /* 사이드바: 숲의 깊은 색감 */
 .sidebar {
-    width: 260px; 
+    width: var(--sidebar-width); 
     height: calc(100vh - 36px);
-    position: sticky;
+    position: fixed;
+    left: 18px;
     top: 18px;
     display: flex;
 
@@ -46,8 +50,12 @@ body {
 
 /* 메인 컨텐츠 영역 */
 .main-content {
-    flex: 1;            /* 사이드바 제외 남은 영역 전체 차지 */
     min-width: 0;
+    width: 100%;
+    max-width: var(--main-max-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+    transform: translateX(var(--main-shift-x));
 
     /* 1. 내부 컨텐츠를 중앙으로 모으기 위한 설정 */
     display: flex;
@@ -64,7 +72,7 @@ body {
 
 .main-content > * {
     width: 100%;
-    max-width: 1000px;
+    max-width: var(--main-max-width);
     margin-left: auto;
     margin-right: auto;
 }

@@ -2,8 +2,12 @@
 
 /* Overview Carousel Container */
 .overview-carousel {
-    max-width: 860px;
+    width: 100%;
+    max-width: 100%;
     margin: 0 auto;
+    position: relative;
+    padding: 0 54px 36px;
+    box-sizing: border-box;
 }
 
 .overview-carousel-track {
@@ -206,11 +210,12 @@ body:not(.js-enabled) .overview-carousel-track .overview-slide:not(:first-child)
 
 /* Carousel Controls */
 .overview-carousel-controls {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 16px;
-    margin-top: 24px;
+    justify-content: space-between;
+    pointer-events: none;
 }
 
 .carousel-btn {
@@ -225,6 +230,7 @@ body:not(.js-enabled) .overview-carousel-track .overview-slide:not(:first-child)
     display: grid;
     place-items: center;
     font-size: 1.2rem;
+    pointer-events: auto;
 }
 
 .carousel-btn:hover {
@@ -235,8 +241,13 @@ body:not(.js-enabled) .overview-carousel-track .overview-slide:not(:first-child)
 }
 
 .carousel-dots {
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    transform: translateX(-50%);
     display: flex;
     gap: 8px;
+    pointer-events: auto;
 }
 
 .carousel-dot {
