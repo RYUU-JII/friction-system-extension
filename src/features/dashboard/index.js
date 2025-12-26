@@ -12,7 +12,13 @@ const DASHBOARD_REFRESH_INTERVAL_MS = 60_000;
 let currentStats = { dates: {} };
 let currentBlockedUrls = [];
 let currentSettings = {};
-let currentSchedule = { scheduleActive: false, startMin: 0, endMin: 1440 };
+let currentSchedule = {
+  scheduleActive: false,
+  days: [0, 1, 2, 3, 4, 5, 6],
+  blocks: [{ startMin: 0, endMin: 1440 }],
+  startMin: 0,
+  endMin: 1440,
+};
 
 let overviewTab = null;
 let detailedRecapTab = null;
@@ -122,14 +128,26 @@ function initDOMReferences() {
   UI.nudgeAutoThresholdRange = document.getElementById('nudgeAutoThresholdRange');
   UI.nudgeAutoThresholdOutput = document.getElementById('nudgeAutoThresholdOutput');
 
-  UI.scheduleContainer = document.getElementById('time-slider-container');
+  UI.scheduleContainer = document.getElementById('schedule-controls');
   UI.scheduleToggle = document.getElementById('schedule-toggle');
+  UI.scheduleSummary = document.getElementById('schedule-summary');
+  UI.scheduleDays = document.getElementById('schedule-days');
+  UI.dayButtons = UI.scheduleDays ? UI.scheduleDays.querySelectorAll('[data-day]') : null;
+  UI.dayPresetButtons = document.querySelectorAll('#schedule [data-day-preset]');
+  UI.schedulePresets = document.getElementById('schedule-presets');
+  UI.addBlockBtn = document.getElementById('add-schedule-block');
   UI.displayStart = document.getElementById('start-time-display');
   UI.displayEnd = document.getElementById('end-time-display');
+  UI.scheduleSpanNote = document.getElementById('schedule-span-note');
+  UI.startInput = document.getElementById('start-time-input');
+  UI.endInput = document.getElementById('end-time-input');
   UI.sliderRange = document.getElementById('slider-range');
+  UI.sliderRangeSecondary = document.getElementById('slider-range-secondary');
+  UI.sliderBlocks = document.getElementById('slider-blocks');
   UI.handleStart = document.getElementById('handle-start');
   UI.handleEnd = document.getElementById('handle-end');
   UI.trackWrapper = document.querySelector('#schedule .slider-track-wrapper');
+  UI.blockList = document.getElementById('schedule-block-list');
 }
 
 function loadDataAndRender() {
@@ -139,13 +157,26 @@ function loadDataAndRender() {
       blockedUrls: [],
       filterSettings: CONFIG_DEFAULT_FILTER_SETTINGS,
       darkMode: false,
-      schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
+      schedule: {
+        scheduleActive: false,
+        days: [0, 1, 2, 3, 4, 5, 6],
+        blocks: [{ startMin: 0, endMin: 1440 }],
+        startMin: 0,
+        endMin: 1440,
+      },
     },
     (items) => {
       currentStats = items.stats || { dates: {} };
       currentBlockedUrls = items.blockedUrls || [];
       currentSettings = mergeFilterSettings(items.filterSettings);
-      currentSchedule = items.schedule || { scheduleActive: false, startMin: 0, endMin: 1440 };
+      currentSchedule =
+        items.schedule || {
+          scheduleActive: false,
+          days: [0, 1, 2, 3, 4, 5, 6],
+          blocks: [{ startMin: 0, endMin: 1440 }],
+          startMin: 0,
+          endMin: 1440,
+        };
 
       document.body.classList.toggle('dark', !!items.darkMode);
       if (UI.darkModeToggle) UI.darkModeToggle.checked = !!items.darkMode;

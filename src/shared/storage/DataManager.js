@@ -75,12 +75,37 @@ class DataManager {
   }
 
   async getSchedule() {
-    const items = await this.getLocal({ schedule: { scheduleActive: false, startMin: 0, endMin: 1440 } });
-    return items.schedule || { scheduleActive: false, startMin: 0, endMin: 1440 };
+    const items = await this.getLocal({
+      schedule: {
+        scheduleActive: false,
+        days: [0, 1, 2, 3, 4, 5, 6],
+        blocks: [{ startMin: 0, endMin: 1440 }],
+        startMin: 0,
+        endMin: 1440,
+      },
+    });
+    return (
+      items.schedule || {
+        scheduleActive: false,
+        days: [0, 1, 2, 3, 4, 5, 6],
+        blocks: [{ startMin: 0, endMin: 1440 }],
+        startMin: 0,
+        endMin: 1440,
+      }
+    );
   }
 
   setSchedule(schedule) {
-    return this.setLocal({ schedule: schedule || { scheduleActive: false, startMin: 0, endMin: 1440 } });
+    return this.setLocal({
+      schedule:
+        schedule || {
+          scheduleActive: false,
+          days: [0, 1, 2, 3, 4, 5, 6],
+          blocks: [{ startMin: 0, endMin: 1440 }],
+          startMin: 0,
+          endMin: 1440,
+        },
+    });
   }
 
   async getStats() {

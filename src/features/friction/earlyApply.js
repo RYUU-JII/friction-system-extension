@@ -13,7 +13,13 @@ export async function earlyApplyFriction() {
   const dataManager = DataManager.getInstance();
   const items = await dataManager.getLocal({
     blockedUrls: [],
-    schedule: { scheduleActive: false, startMin: 0, endMin: 1440 },
+    schedule: {
+      scheduleActive: false,
+      days: [0, 1, 2, 3, 4, 5, 6],
+      blocks: [{ startMin: 0, endMin: 1440 }],
+      startMin: 0,
+      endMin: 1440,
+    },
     filterSettings: CONFIG_DEFAULT_FILTER_SETTINGS,
   });
 
