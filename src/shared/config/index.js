@@ -1,6 +1,5 @@
 export const CONFIG_DEFAULT_CLICK_DELAY_MS = 1000;
 export const CONFIG_DEFAULT_SCROLL_FRICTION_MS = 50;
-export const CONFIG_DEFAULT_DELAY_TIME_CSS = '0.5s';
 
 export const CONFIG_DEFAULT_TEXT_BLUR_VALUE = '0.3px';
 export const CONFIG_DEFAULT_TEXT_SHADOW_VALUE = '0 1px 0 rgba(0,0,0,0.25)';
@@ -106,6 +105,7 @@ export function normalizeFilterSettings(partial = {}) {
 
   for (const [key, value] of Object.entries(source)) {
     if (key === 'desaturation') continue;
+    if (key === 'delay') continue;
     if (!(key in merged)) merged[key] = value;
   }
 
@@ -141,7 +141,6 @@ export function materializeFilterSettings(partial = {}) {
 
 export const CONFIG_DEFAULT_FILTER_SETTINGS = {
   blur: { isActive: true, value: 1 },
-  delay: { isActive: true, value: CONFIG_DEFAULT_DELAY_TIME_CSS },
   clickDelay: { isActive: true, value: 2 },
   scrollFriction: { isActive: true, value: 1 },
   saturation: { isActive: true, value: 1 },
