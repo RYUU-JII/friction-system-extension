@@ -96,7 +96,8 @@ export function normalizeFilterSettings(partial = {}) {
         step = coerceStepFromValue(key, def.value);
       }
       const clamped = clampFilterStep(step ?? 0);
-      merged[key] = { isActive, value: isActive ? clamped : 0, step: isActive ? clamped : 0 };
+      const nonZero = clamped <= 0 ? 1 : clamped;
+      merged[key] = { isActive, value: nonZero, step: nonZero };
       continue;
     }
 

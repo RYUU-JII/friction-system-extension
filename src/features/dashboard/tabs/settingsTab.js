@@ -41,18 +41,31 @@ const ADVANCED_TIER = 'advanced';
 const ADVANCED_TOGGLE_STORAGE_PREFIX = 'settingsAdvancedOpen:';
 
 function formatStepDisplay(key, step) {
+  const clamped = clampFilterStep(step);
+  const nonZero = clamped <= 0 ? 1 : clamped;
+  const physical = formatStepPhysicalValue(key, nonZero);
+  if (!physical) return `Lv${nonZero}`;
+  return `Lv${nonZero} · ${physical}`;
+}
+
+function formatStepPhysicalValue(key, step) {
   const value = getFilterStepValue(key, clampFilterStep(step));
   if (value === null || value === undefined) return '';
   if (key === 'clickDelay') {
     const seconds = Number(value) / 1000;
-    if (!Number.isFinite(seconds)) return '';
+    if (!Number.isFinite(seconds)) return String(value);
     const label = seconds.toFixed(1).replace(/\.0$/, '');
     return `${label}s`;
   }
   if (key === 'scrollFriction') {
     const ms = Number(value);
-    if (!Number.isFinite(ms)) return '';
+    if (!Number.isFinite(ms)) return String(value);
     return `${Math.round(ms)}ms`;
+  }
+  if (key === 'saturation' || key === 'textOpacity') {
+    const ratio = Number(value);
+    if (!Number.isFinite(ratio)) return String(value);
+    return `${Math.round(ratio * 100)}%`;
   }
   return String(value);
 }
@@ -80,7 +93,7 @@ const SETTING_METADATA_V2 = {
     category: 'media',
     tier: 'basic',
     order: 10,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('blur', inputValue),
@@ -95,7 +108,7 @@ const SETTING_METADATA_V2 = {
     category: 'media',
     tier: 'basic',
     order: 20,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('saturation', inputValue),
@@ -110,7 +123,7 @@ const SETTING_METADATA_V2 = {
     category: 'text',
     tier: 'basic',
     order: 10,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('letterSpacing', inputValue),
@@ -125,7 +138,7 @@ const SETTING_METADATA_V2 = {
     category: 'text',
     tier: 'basic',
     order: 20,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('textOpacity', inputValue),
@@ -178,7 +191,7 @@ const SETTING_METADATA_V2 = {
     category: 'delay',
     tier: 'basic',
     order: 10,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('clickDelay', inputValue),
@@ -193,7 +206,7 @@ const SETTING_METADATA_V2 = {
     category: 'delay',
     tier: 'basic',
     order: 20,
-    min: '0',
+    min: '1',
     max: '3',
     step: '1',
     displayValue: (inputValue) => formatStepDisplay('scrollFriction', inputValue),
@@ -219,7 +232,8 @@ function valueForInputV2(meta, storedValue) {
 
   if (meta.storage === 'step') {
     const n = parseInt(String(value), 10);
-    return Number.isFinite(n) ? clampFilterStep(n) : 0;
+    const clamped = Number.isFinite(n) ? clampFilterStep(n) : 1;
+    return clamped <= 0 ? 1 : clamped;
   }
 
   if (meta.storage === 'raw') return String(value);
@@ -259,7 +273,10 @@ function valueForStorageV2(_key, meta, inputValue) {
   if (typeof meta?.toStorage === 'function') return meta.toStorage(raw);
 
   if (meta.storage === 'ms') return parseInt(String(raw), 10) || 0;
-  if (meta.storage === 'step') return clampFilterStep(parseInt(String(raw), 10) || 0);
+  if (meta.storage === 'step') {
+    const clamped = clampFilterStep(parseInt(String(raw), 10) || 0);
+    return clamped <= 0 ? 1 : clamped;
+  }
   if (meta.storage === 'raw') return String(raw);
   if (meta.storage === 'secondsCss') {
     const num = parseFloat(String(raw)) || 0;
@@ -505,13 +522,37 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     const toggle = card.querySelector('.toggle-active');
     const input = card.querySelector('.input-value');
     const output = card.querySelector('.setting-output');
+    const levelBadge = card.querySelector('[data-level-badge="true"]');
     const isActive = !!toggle?.checked;
 
     if (input) input.disabled = !isActive;
     card.classList.toggle('is-disabled', !isActive);
 
-    if (!output) return;
     const raw = input?.value ?? '';
+
+    if (meta.storage === 'step') {
+      const step = clampFilterStep(parseInt(String(raw), 10) || 0) || 1;
+      const nonZeroStep = step <= 0 ? 1 : step;
+      card.dataset.step = String(nonZeroStep);
+      card.style.setProperty('--range-accent', isActive ? `var(--level-${nonZeroStep})` : 'var(--border-color)');
+      card.style.setProperty('--range-progress', isActive ? `${((nonZeroStep - 1) / 2) * 100}%` : '0%');
+
+      if (levelBadge) {
+        const physical = formatStepPhysicalValue(key, nonZeroStep) || '';
+        levelBadge.textContent = isActive ? `Lv${nonZeroStep}` : 'OFF';
+        levelBadge.title = isActive ? physical : `최근: Lv${nonZeroStep}${physical ? ` · ${physical}` : ''}`;
+      }
+    } else {
+      card.dataset.step = '';
+      card.style.removeProperty('--range-progress');
+      card.style.removeProperty('--range-accent');
+    }
+
+    if (!output) return;
+    if (!isActive) {
+      output.textContent = 'OFF';
+      return;
+    }
     const valueLabel =
       typeof meta.displayValue === 'function'
         ? meta.displayValue(raw)
@@ -749,38 +790,60 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     const isToggleOnly = meta.control === 'toggle';
     const control = meta.control === 'text' ? 'text' : 'range';
     const isActive = !!setting.isActive;
+    const isStepRange = control === 'range' && meta.storage === 'step';
 
     const card = document.createElement('div');
     card.className = 'setting-card';
     card.dataset.key = key;
     if (isToggleOnly) card.classList.add('is-toggle-only');
+    if (isStepRange) card.classList.add('is-stepped');
     const controlMarkup = isToggleOnly
       ? `<div class="setting-helper">${meta.helper || ''}</div>`
-      : `
-        <input
-          id="${inputId}"
-          class="input-value ${control === 'range' ? 'input-range' : ''}"
-          data-key="${key}"
-          type="${control === 'range' ? 'range' : meta.type === 'number' ? 'number' : 'text'}"
-          value="${String(inputValue).replace(/\"/g, '&quot;')}"
-          placeholder="${meta.placeholder || ''}"
-          ${
-            control === 'range'
-              ? `${meta.min !== undefined ? `min="${meta.min}"` : ''} ${meta.max !== undefined ? `max="${meta.max}"` : ''} ${meta.step !== undefined ? `step="${meta.step}"` : ''}`
-              : `${meta.min ? `min="${meta.min}"` : ''} ${meta.step ? `step="${meta.step}"` : ''}`
-          }
-          ${isActive ? '' : 'disabled'}
-          style="${control === 'range' ? '' : 'flex-grow: 1;'}"
-        >
-        ${
-          control === 'range'
-            ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
-            : `<span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>`
-        }
-      `;
+      : control === 'range'
+        ? `
+          <div class="setting-range-wrap ${isStepRange ? 'is-stepped' : ''}">
+            <div class="setting-range-row">
+              <input
+                id="${inputId}"
+                class="input-value input-range"
+                data-key="${key}"
+                type="range"
+                value="${String(inputValue).replace(/\"/g, '&quot;')}"
+                placeholder="${meta.placeholder || ''}"
+                ${meta.min !== undefined ? `min="${meta.min}"` : ''}
+                ${meta.max !== undefined ? `max="${meta.max}"` : ''}
+                ${meta.step !== undefined ? `step="${meta.step}"` : ''}
+                ${isActive ? '' : 'disabled'}
+              >
+            </div>
+            ${
+              !isStepRange
+                ? `<output class="setting-output" for="${inputId}" aria-live="polite"></output>`
+                : ''
+            }
+          </div>
+        `
+        : `
+          <input
+            id="${inputId}"
+            class="input-value"
+            data-key="${key}"
+            type="${meta.type === 'number' ? 'number' : 'text'}"
+            value="${String(inputValue).replace(/\"/g, '&quot;')}"
+            placeholder="${meta.placeholder || ''}"
+            ${meta.min ? `min="${meta.min}"` : ''}
+            ${meta.step ? `step="${meta.step}"` : ''}
+            ${isActive ? '' : 'disabled'}
+            style="flex-grow: 1;"
+          >
+          <span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>
+        `;
     card.innerHTML = `
       <div class="setting-header">
-        <label for="${inputId}">${meta.label}</label>
+        <div class="setting-header-left">
+          ${isStepRange ? '<span class="setting-level-badge" data-level-badge="true"></span>' : ''}
+          <label for="${inputId}">${meta.label}</label>
+        </div>
         <label class="switch">
           <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
           <span class="slider"></span>

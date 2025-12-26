@@ -1,6 +1,8 @@
 import DataManager from '../../shared/storage/DataManager.js';
 import {
     CONFIG_DEFAULT_FILTER_SETTINGS,
+    clampFilterStep,
+    getFilterStepValue,
     materializeFilterSettings,
     normalizeFilterSettings,
 } from '../../shared/config/index.js';
@@ -575,34 +577,31 @@ function updateActiveTabInfo(tab, now) {
 
 function buildAppliedFrictionSnapshot(filterSettings, { isChangedInTick = false } = {}) {
     const normalized = normalizeFilterSettings(filterSettings || {});
+    const stepKeyList = ['blur', 'saturation', 'textOpacity', 'letterSpacing', 'clickDelay', 'scrollFriction'];
+
     const materialized = materializeFilterSettings(filterSettings || {});
+    const stepSnapshot = {};
+    for (const key of stepKeyList) {
+        const entry = normalized[key] || {};
+        const isActive = !!entry.isActive;
+        const selectedStepRaw = entry.step ?? entry.value ?? 1;
+        const clamped = clampFilterStep(selectedStepRaw);
+        const selectedStep = clamped <= 0 ? 1 : clamped;
+        const selectedValue = getFilterStepValue(key, selectedStep);
+        const appliedStep = isActive ? selectedStep : 0;
+        const appliedValue = getFilterStepValue(key, appliedStep);
+
+        stepSnapshot[key] = {
+            isActive,
+            step: appliedStep,
+            value: appliedValue,
+            selectedStep,
+            selectedValue,
+            materializedValue: materialized?.[key]?.value ?? null,
+        };
+    }
     return {
-        steps: {
-            blur: {
-                step: normalized.blur?.step ?? 0,
-                value: materialized.blur?.value ?? null,
-            },
-            saturation: {
-                step: normalized.saturation?.step ?? 0,
-                value: materialized.saturation?.value ?? null,
-            },
-            textOpacity: {
-                step: normalized.textOpacity?.step ?? 0,
-                value: materialized.textOpacity?.value ?? null,
-            },
-            letterSpacing: {
-                step: normalized.letterSpacing?.step ?? 0,
-                value: materialized.letterSpacing?.value ?? null,
-            },
-            clickDelay: {
-                step: normalized.clickDelay?.step ?? 0,
-                value: materialized.clickDelay?.value ?? null,
-            },
-            scrollFriction: {
-                step: normalized.scrollFriction?.step ?? 0,
-                value: materialized.scrollFriction?.value ?? null,
-            },
-        },
+        steps: stepSnapshot,
         toggles: {
             textShuffle: {
                 isActive: !!normalized.textShuffle?.isActive,
