@@ -1,10 +1,12 @@
 export function createScheduleTab({ UI, getSchedule, setSchedule }) {
   let isBound = false;
   let selectedBlockId = null;
+  let editingBlockId = null;
+  let allowNoSelection = false;
 
   const MINUTES_IN_DAY = 1440;
   const STEP_MINUTES = 10;
-  const MAX_START_MIN = MINUTES_IN_DAY - STEP_MINUTES;
+  const INPUT_MIN_GAP = 1;
   const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY_PRESETS = {
     weekday: [1, 2, 3, 4, 5],
@@ -28,8 +30,8 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     return Math.round(minutes / STEP_MINUTES) * STEP_MINUTES;
   }
 
-  function clampStart(minutes) {
-    return Math.max(0, Math.min(MAX_START_MIN, minutes));
+  function clampStart(minutes, minGap = INPUT_MIN_GAP) {
+    return Math.max(0, Math.min(MINUTES_IN_DAY - minGap, minutes));
   }
 
   function clampEnd(minutes) {
@@ -38,14 +40,38 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
 
   function parseTimeInput(value, allow24 = false) {
     if (!value) return null;
-    const match = String(value).trim().match(/^(\d{1,2})\s*:\s*(\d{2})$/);
-    if (!match) return null;
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
+    const digits = String(value).replace(/\D/g, '').slice(0, 4);
+    if (!digits) return null;
+    const padded = digits.padStart(4, '0');
+    const hours = Number(padded.slice(0, 2));
+    const minutes = Number(padded.slice(2, 4));
     if (hours === 24 && minutes === 0) return allow24 ? MINUTES_IN_DAY : null;
     if (hours < 0 || hours > 23) return null;
     if (minutes < 0 || minutes > 59) return null;
     return hours * 60 + minutes;
+  }
+
+  function toTimeDigits(value) {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    return digits.slice(-4).padStart(4, '0');
+  }
+
+  function formatTimeDigits(digits) {
+    const padded = toTimeDigits(digits);
+    return `${padded.slice(0, 2)}:${padded.slice(2)}`;
+  }
+
+  function setInputBuffer(input, digits) {
+    if (!input) return '0000';
+    const buffer = toTimeDigits(digits);
+    input.dataset.timeBuffer = buffer;
+    input.value = formatTimeDigits(buffer);
+    return buffer;
+  }
+
+  function getInputBuffer(input) {
+    if (!input) return '0000';
+    return toTimeDigits(input.dataset.timeBuffer ?? input.value);
   }
 
   function normalizeDays(days) {
@@ -67,21 +93,23 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     }
 
     const normalized = nextBlocks.map((block) => {
+      const rawName = typeof block?.name === 'string' ? block.name.trim() : '';
       const startRaw = Number.isFinite(block?.startMin) ? block.startMin : fallbackStart;
       const endRaw = Number.isFinite(block?.endMin) ? block.endMin : fallbackEnd;
-      let startMin = clampStart(snapMinutes(startRaw));
-      let endMin = clampEnd(snapMinutes(endRaw));
+      let startMin = clampStart(Math.round(startRaw));
+      let endMin = clampEnd(Math.round(endRaw));
       if (startMin !== startRaw || endMin !== endRaw) didChange = true;
       let id = typeof block?.id === 'string' && block.id ? block.id : generateId();
       if (id !== block?.id) didChange = true;
       if (startMin === endMin) {
-        endMin = clampEnd(endMin + STEP_MINUTES);
+        endMin = clampEnd(endMin + INPUT_MIN_GAP);
         if (endMin === startMin) {
-          startMin = clampStart(startMin - STEP_MINUTES);
+          startMin = clampStart(startMin - INPUT_MIN_GAP);
         }
         didChange = true;
       }
-      return { id, startMin, endMin };
+      if (rawName && rawName !== block?.name) didChange = true;
+      return rawName ? { id, startMin, endMin, name: rawName } : { id, startMin, endMin };
     });
 
     return { blocks: normalized, didChange };
@@ -125,6 +153,12 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     return normalized.map((day) => DAY_LABELS[day]).join(' · ');
   }
 
+  function getBlockLabel(block, idx) {
+    const fallback = `블록 ${idx + 1}`;
+    if (block?.name) return block.name;
+    return fallback;
+  }
+
   function getBlockDuration(block) {
     if (!block) return 0;
     if (block.startMin === block.endMin) return 0;
@@ -154,10 +188,21 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
       selectedBlockId = null;
       return null;
     }
-    if (!selectedBlockId || !schedule.blocks.some((block) => block.id === selectedBlockId)) {
+    if (!selectedBlockId) {
+      if (allowNoSelection) return null;
       selectedBlockId = schedule.blocks[0].id;
+      return schedule.blocks[0];
     }
-    return schedule.blocks.find((block) => block.id === selectedBlockId);
+    const match = schedule.blocks.find((block) => block.id === selectedBlockId);
+    if (!match) {
+      if (allowNoSelection) {
+        selectedBlockId = null;
+        return null;
+      }
+      selectedBlockId = schedule.blocks[0].id;
+      return schedule.blocks[0];
+    }
+    return match;
   }
 
   function updateSummary(schedule) {
@@ -212,15 +257,18 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
       row.className = `schedule-block-row${block.id === selectedBlockId ? ' is-active' : ''}`;
       row.dataset.blockId = block.id;
 
-      const selectBtn = document.createElement('button');
-      selectBtn.type = 'button';
-      selectBtn.className = 'schedule-block-select';
-      selectBtn.dataset.action = 'select-block';
-      selectBtn.dataset.blockId = block.id;
+      const isEditing = block.id === editingBlockId;
+      const selectEl = document.createElement('div');
+      selectEl.className = `schedule-block-select${isEditing ? ' is-editing' : ''}`;
+      if (!isEditing) {
+        selectEl.dataset.action = 'select-block';
+        selectEl.dataset.blockId = block.id;
+        selectEl.setAttribute('role', 'button');
+        selectEl.tabIndex = 0;
+      }
 
-      const name = document.createElement('span');
-      name.className = 'schedule-block-name';
-      name.textContent = `블록 ${idx + 1}`;
+      const left = document.createElement('div');
+      left.className = 'schedule-block-left';
 
       const time = document.createElement('span');
       time.className = 'schedule-block-time';
@@ -233,9 +281,38 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
         time.appendChild(badge);
       }
 
-      selectBtn.appendChild(name);
-      selectBtn.appendChild(time);
-      row.appendChild(selectBtn);
+      if (isEditing) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'schedule-block-name-input';
+        input.placeholder = `블록 ${idx + 1}`;
+        input.value = block.name || '';
+        input.maxLength = 16;
+        input.dataset.blockId = block.id;
+        left.appendChild(input);
+      } else {
+        const name = document.createElement('span');
+        name.className = 'schedule-block-name';
+        name.textContent = getBlockLabel(block, idx);
+        const renameBtn = document.createElement('button');
+        renameBtn.type = 'button';
+        renameBtn.className = 'schedule-block-rename';
+        renameBtn.dataset.action = 'rename-block';
+        renameBtn.dataset.blockId = block.id;
+        renameBtn.setAttribute('aria-label', '이름 변경');
+        renameBtn.title = '이름 변경';
+        const renameIcon = document.createElement('span');
+        renameIcon.className = 'schedule-block-rename-icon';
+        renameIcon.setAttribute('aria-hidden', 'true');
+        renameIcon.textContent = '✎';
+        renameBtn.appendChild(renameIcon);
+        left.appendChild(name);
+        left.appendChild(renameBtn);
+      }
+
+      selectEl.appendChild(left);
+      selectEl.appendChild(time);
+      row.appendChild(selectEl);
 
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
@@ -249,6 +326,16 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
       fragment.appendChild(row);
     });
     UI.blockList.appendChild(fragment);
+
+    if (editingBlockId) {
+      const input = UI.blockList.querySelector(
+        `.schedule-block-name-input[data-block-id="${editingBlockId}"]`
+      );
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
   }
 
   function renderPresets(selectedBlock) {
@@ -273,30 +360,48 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     }
 
     const selectedBlock = ensureSelectedBlock(schedule);
-    if (!selectedBlock) return;
+    if (editingBlockId && !schedule.blocks.some((block) => block.id === editingBlockId)) {
+      editingBlockId = null;
+    }
 
-    const startPct = (selectedBlock.startMin / MINUTES_IN_DAY) * 100;
-    const endPct = (selectedBlock.endMin / MINUTES_IN_DAY) * 100;
-    const wraps = selectedBlock.startMin > selectedBlock.endMin;
+    const hasSelection = !!selectedBlock;
+    const wraps = hasSelection && selectedBlock.startMin > selectedBlock.endMin;
+    const startPct = hasSelection ? (selectedBlock.startMin / MINUTES_IN_DAY) * 100 : 0;
+    const endPct = hasSelection ? (selectedBlock.endMin / MINUTES_IN_DAY) * 100 : 0;
 
-    if (UI.handleStart) UI.handleStart.style.left = `${startPct}%`;
-    if (UI.handleEnd) UI.handleEnd.style.left = `${endPct}%`;
+    if (UI.handleStart) {
+      UI.handleStart.style.left = `${startPct}%`;
+      UI.handleStart.style.opacity = hasSelection ? '1' : '0';
+      UI.handleStart.style.pointerEvents = hasSelection ? 'auto' : 'none';
+    }
+    if (UI.handleEnd) {
+      UI.handleEnd.style.left = `${endPct}%`;
+      UI.handleEnd.style.opacity = hasSelection ? '1' : '0';
+      UI.handleEnd.style.pointerEvents = hasSelection ? 'auto' : 'none';
+    }
 
     if (UI.sliderRange) {
       UI.sliderRange.style.left = `${startPct}%`;
       UI.sliderRange.style.width = `${wraps ? 100 - startPct : Math.max(0, endPct - startPct)}%`;
+      UI.sliderRange.style.opacity = hasSelection ? '0.9' : '0';
     }
 
     if (UI.sliderRangeSecondary) {
       UI.sliderRangeSecondary.style.left = '0%';
       UI.sliderRangeSecondary.style.width = wraps ? `${endPct}%` : '0%';
-      UI.sliderRangeSecondary.style.opacity = wraps ? '0.9' : '0';
+      UI.sliderRangeSecondary.style.opacity = hasSelection && wraps ? '0.9' : '0';
     }
 
-    if (UI.displayStart) UI.displayStart.textContent = minToTime(selectedBlock.startMin);
-    if (UI.displayEnd) UI.displayEnd.textContent = minToTime(selectedBlock.endMin);
-    if (UI.startInput) UI.startInput.value = minToTime(selectedBlock.startMin);
-    if (UI.endInput) UI.endInput.value = minToTime(selectedBlock.endMin);
+    if (UI.startInput) UI.startInput.disabled = !hasSelection;
+    if (UI.endInput) UI.endInput.disabled = !hasSelection;
+    if (hasSelection) {
+      if (UI.startInput && document.activeElement !== UI.startInput) {
+        setInputBuffer(UI.startInput, minToTime(selectedBlock.startMin));
+      }
+      if (UI.endInput && document.activeElement !== UI.endInput) {
+        setInputBuffer(UI.endInput, minToTime(selectedBlock.endMin));
+      }
+    }
 
     if (UI.scheduleSpanNote) {
       UI.scheduleSpanNote.textContent = wraps ? '익일 종료' : '';
@@ -331,7 +436,8 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     persist(schedule);
   }
 
-  function updateSelectedBlockTime(isStart, minutes, persistNow = false) {
+  function updateSelectedBlockTime(isStart, minutes, options = {}) {
+    const { snap = true, minGap = STEP_MINUTES, persistNow = false } = options;
     const normalized = normalizeSchedule(getSchedule());
     const schedule = normalized.schedule;
     if (!schedule.blocks.length) return;
@@ -340,19 +446,20 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     if (idx === -1) return;
 
     const block = { ...blocks[idx] };
-    const snapped = snapMinutes(minutes);
+    const baseMinutes = Number.isFinite(minutes) ? minutes : 0;
+    const nextMinutes = snap ? snapMinutes(baseMinutes) : Math.round(baseMinutes);
     if (isStart) {
-      block.startMin = clampStart(snapped);
+      block.startMin = clampStart(nextMinutes, minGap);
       if (block.startMin === block.endMin) {
-        let candidate = clampStart(block.startMin - STEP_MINUTES);
-        if (candidate === block.endMin) candidate = clampStart(block.startMin + STEP_MINUTES);
+        let candidate = clampStart(block.startMin - minGap, minGap);
+        if (candidate === block.endMin) candidate = clampStart(block.startMin + minGap, minGap);
         block.startMin = candidate;
       }
     } else {
-      block.endMin = clampEnd(snapped);
+      block.endMin = clampEnd(nextMinutes);
       if (block.startMin === block.endMin) {
-        let candidate = clampEnd(block.endMin + STEP_MINUTES);
-        if (candidate === block.startMin) candidate = clampEnd(block.endMin - STEP_MINUTES);
+        let candidate = clampEnd(block.endMin + minGap);
+        if (candidate === block.startMin) candidate = clampEnd(block.endMin - minGap);
         block.endMin = candidate;
       }
     }
@@ -385,6 +492,7 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
       blocks.push(target);
       selectedBlockId = target.id;
     }
+    allowNoSelection = false;
 
     const next = { ...schedule, blocks };
     next.startMin = blocks[0].startMin;
@@ -411,6 +519,8 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     next.startMin = blocks[0].startMin;
     next.endMin = blocks[0].endMin;
     selectedBlockId = newBlock.id;
+    allowNoSelection = false;
+    editingBlockId = null;
     commit(next);
   }
 
@@ -423,6 +533,8 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     if (!blocks.some((block) => block.id === selectedBlockId)) {
       selectedBlockId = blocks[0].id;
     }
+    allowNoSelection = false;
+    if (editingBlockId === blockId) editingBlockId = null;
     const next = { ...schedule, blocks };
     next.startMin = blocks[0].startMin;
     next.endMin = blocks[0].endMin;
@@ -435,7 +547,31 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
     const schedule = normalized.schedule;
     if (!schedule.blocks.some((block) => block.id === blockId)) return;
     selectedBlockId = blockId;
+    allowNoSelection = false;
+    editingBlockId = null;
     updateUI(schedule);
+  }
+
+  function updateBlockName(blockId, name) {
+    if (!blockId) return;
+    const normalized = normalizeSchedule(getSchedule());
+    const schedule = normalized.schedule;
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const blocks = schedule.blocks.map((block) => {
+      if (block.id !== blockId) return block;
+      if (!trimmed) {
+        const nextBlock = { ...block };
+        delete nextBlock.name;
+        return nextBlock;
+      }
+      return { ...block, name: trimmed };
+    });
+    const next = { ...schedule, blocks };
+    next.startMin = blocks[0].startMin;
+    next.endMin = blocks[0].endMin;
+    editingBlockId = null;
+    allowNoSelection = false;
+    commit(next);
   }
 
   function toggleDay(day) {
@@ -468,8 +604,7 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
       const move = (me) => {
         const rect = UI.trackWrapper.getBoundingClientRect();
         let pct = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-        let mins = snapMinutes(pct * MINUTES_IN_DAY);
-        mins = isStart ? clampStart(mins) : clampEnd(mins);
+        let mins = pct * MINUTES_IN_DAY;
         updateSelectedBlockTime(isStart, mins);
       };
 
@@ -486,20 +621,100 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
 
   function bindTimeInput(input, isStart) {
     if (!input) return;
-    const applyValue = () => {
+    const markDirty = (flag) => {
+      input.dataset.timeDirty = flag ? '1' : '0';
+    };
+    const isDirty = () => input.dataset.timeDirty === '1';
+    const commitBuffer = () => {
+      if (!isDirty()) {
+        updateUI();
+        return;
+      }
       const minutes = parseTimeInput(input.value, !isStart);
       if (minutes === null) {
         updateUI();
         return;
       }
-      updateSelectedBlockTime(isStart, minutes, true);
+      updateSelectedBlockTime(isStart, minutes, {
+        snap: false,
+        minGap: INPUT_MIN_GAP,
+        persistNow: true,
+      });
+      markDirty(false);
     };
-    input.addEventListener('blur', applyValue);
+    const resetBuffer = () => {
+      markDirty(false);
+      setInputBuffer(input, '0000');
+    };
+
+    input.addEventListener('focus', () => {
+      resetBuffer();
+      input.setSelectionRange?.(input.value.length, input.value.length);
+    });
+
     input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
+      const key = event.key;
+      if (key >= '0' && key <= '9') {
         event.preventDefault();
-        input.blur();
+        markDirty(true);
+        setInputBuffer(input, `${getInputBuffer(input)}${key}`.slice(-4));
+        return;
       }
+      if (key === 'Backspace') {
+        event.preventDefault();
+        markDirty(true);
+        setInputBuffer(input, `0${getInputBuffer(input).slice(0, -1)}`);
+        return;
+      }
+      if (key === 'Delete') {
+        event.preventDefault();
+        markDirty(true);
+        setInputBuffer(input, '0000');
+        return;
+      }
+      if (key === 'Enter') {
+        event.preventDefault();
+        commitBuffer();
+        input.blur();
+        return;
+      }
+      if (
+        key === 'Tab' ||
+        key === 'ArrowLeft' ||
+        key === 'ArrowRight' ||
+        key === 'ArrowUp' ||
+        key === 'ArrowDown' ||
+        key === 'Home' ||
+        key === 'End' ||
+        key === 'Escape'
+      ) {
+        return;
+      }
+      event.preventDefault();
+    });
+
+    input.addEventListener('input', () => {
+      const digits = String(input.value).replace(/\D/g, '');
+      if (!digits) {
+        markDirty(true);
+        setInputBuffer(input, '0000');
+        return;
+      }
+      markDirty(true);
+      setInputBuffer(input, digits);
+    });
+
+    input.addEventListener('paste', (event) => {
+      event.preventDefault();
+      const text = event.clipboardData?.getData('text') ?? '';
+      const digits = String(text).replace(/\D/g, '');
+      if (!digits) return;
+      markDirty(true);
+      setInputBuffer(input, digits);
+    });
+
+    input.addEventListener('blur', () => {
+      commitBuffer();
     });
   }
 
@@ -556,7 +771,57 @@ export function createScheduleTab({ UI, getSchedule, setSchedule }) {
         const blockId = actionEl.dataset.blockId;
         const action = actionEl.dataset.action;
         if (action === 'remove-block') removeBlock(blockId);
+        if (action === 'rename-block') {
+          selectedBlockId = blockId;
+          allowNoSelection = false;
+          editingBlockId = blockId;
+          updateUI();
+        }
         if (action === 'select-block') selectBlock(blockId);
+      });
+
+      UI.blockList.addEventListener('keydown', (e) => {
+        const input = e.target.closest('.schedule-block-name-input');
+        if (!input) return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          updateBlockName(input.dataset.blockId, input.value);
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          editingBlockId = null;
+          updateUI();
+        }
+      });
+
+      UI.blockList.addEventListener('keydown', (e) => {
+        const selectEl = e.target.closest('.schedule-block-select[data-action="select-block"]');
+        if (!selectEl) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectBlock(selectEl.dataset.blockId);
+        }
+      });
+
+      UI.blockList.addEventListener('focusout', (e) => {
+        const input = e.target.closest('.schedule-block-name-input');
+        if (!input) return;
+        updateBlockName(input.dataset.blockId, input.value);
+      });
+    }
+
+    if (UI.scheduleSection) {
+      UI.scheduleSection.addEventListener('click', (e) => {
+        if (!UI.scheduleSection.classList.contains('active')) return;
+        const target = e.target;
+        const isInteractive = target.closest(
+          'button, input, textarea, select, label, a, [role="button"], .slider-track-wrapper, .schedule-block-select'
+        );
+        if (isInteractive) return;
+        allowNoSelection = true;
+        selectedBlockId = null;
+        editingBlockId = null;
+        updateUI();
       });
     }
 

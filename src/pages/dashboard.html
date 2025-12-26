@@ -350,24 +350,38 @@
 
             <div class="time-display">
               <div class="time-display-main">
-                <span id="start-time-display">00:00</span>
+                <label class="time-field">
+                  <span class="time-field-label">시작</span>
+                  <input
+                    type="text"
+                    id="start-time-input"
+                    class="time-field-input"
+                    placeholder="00:00"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    maxlength="5"
+                    autocomplete="off"
+                  />
+                </label>
                 <span class="separator">~</span>
-                <span id="end-time-display">24:00</span>
+                <label class="time-field">
+                  <span class="time-field-label">종료</span>
+                  <input
+                    type="text"
+                    id="end-time-input"
+                    class="time-field-input"
+                    placeholder="24:00"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    maxlength="5"
+                    autocomplete="off"
+                  />
+                </label>
               </div>
-              <span class="time-display-note" id="schedule-span-note"></span>
-            </div>
-            <div class="time-inputs">
-              <label class="time-input">
-                <span>시작</span>
-                <input type="text" id="start-time-input" placeholder="HH:MM" inputmode="numeric" />
-              </label>
-              <label class="time-input">
-                <span>종료</span>
-                <input type="text" id="end-time-input" placeholder="HH:MM" inputmode="numeric" />
-              </label>
             </div>
 
             <div class="slider-track-wrapper">
+              <span class="schedule-span-note" id="schedule-span-note"></span>
               <div class="slider-track"></div>
               <div class="slider-ticks"></div>
               <div class="slider-blocks" id="slider-blocks"></div>
