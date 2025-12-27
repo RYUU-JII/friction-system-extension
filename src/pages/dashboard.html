@@ -279,37 +279,49 @@
       </section>
       <section id="settings" class="tab-content">
         <header>
-          <h1>필터 설정</h1>
-          <p>단순 필터(미디어/텍스트/딜레이/기타)를 원하는 강도로 조절해 보세요.</p>
+          <div class="settings-header-row">
+            <div class="settings-header-title">
+              <h1>필터 설정</h1>
+              <p>단순 필터(미디어/텍스트/딜레이/기타)를 원하는 강도로 조절해 보세요.</p>
+            </div>
+            <div class="settings-header-toggle">
+              <span class="settings-header-toggle-label">인디케이터</span>
+              <label class="switch">
+                <input type="checkbox" id="settingsIndicatorToggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
         </header>
 
-        <div class="card settings-subtabs" role="tablist" aria-label="필터 설정 분류" style="margin-bottom: 16px">
-          <button type="button" class="settings-subtab-btn is-active" data-settings-subtab="media" role="tab" aria-selected="true">미디어 필터</button>
-          <button type="button" class="settings-subtab-btn" data-settings-subtab="text" role="tab" aria-selected="false">텍스트 필터</button>
-          <button type="button" class="settings-subtab-btn" data-settings-subtab="delay" role="tab" aria-selected="false">딜레이 필터</button>
-          <button type="button" class="settings-subtab-btn" data-settings-subtab="misc" role="tab" aria-selected="false">기타</button>
-        </div>
-
-        <div class="card settings-preview" id="settingsPreview" style="margin-bottom: 16px">
+        <div class="settings-layout">
+          <div class="card settings-preview" id="settingsPreview">
           <div class="settings-preview-header">
             <div class="settings-preview-title">
               <h3 style="margin: 0">예시 미리보기</h3>
               <p id="settingsPreviewDescription" style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px"></p>
             </div>
           </div>
-          <div class="settings-preview-grid">
-            <div class="preview-col">
-              <div class="preview-col-label">Before</div>
-              <div class="preview-frame" id="previewBefore"></div>
-            </div>
-            <div class="preview-col">
-              <div class="preview-col-label">After</div>
-              <div class="preview-frame" id="previewAfter"></div>
+          <div class="settings-preview-body">
+            <div class="settings-preview-grid">
+              <div class="preview-col">
+                <div class="preview-col-label">Before</div>
+                <div class="preview-frame" id="previewBefore"></div>
+              </div>
+              <div class="preview-col">
+                <div class="preview-col-label">After</div>
+                <div class="preview-frame" id="previewAfter"></div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="settings-grid" id="settingsGrid"></div>
+        <div class="card settings-panel">
+          <div class="settings-panel-body">
+            <div class="settings-grid" id="settingsGrid"></div>
+          </div>
+        </div>
+      </div>
       </section>
 
       <section id="util" class="tab-content">

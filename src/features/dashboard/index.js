@@ -102,6 +102,7 @@ function initDOMReferences() {
   UI.settingsPreviewDescription = document.getElementById('settingsPreviewDescription');
   UI.previewBefore = document.getElementById('previewBefore');
   UI.previewAfter = document.getElementById('previewAfter');
+  UI.settingsIndicatorToggle = document.getElementById('settingsIndicatorToggle');
 
   UI.utilVideoSkipGuardCard = document.getElementById('utilVideoSkipGuardCard');
   UI.utilVideoSkipGuardToggle = document.getElementById('utilVideoSkipGuardToggle');
