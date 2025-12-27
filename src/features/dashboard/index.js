@@ -60,6 +60,7 @@ function applyActiveTabId(tabId) {
 
   tabBtn.classList.add('active');
   content.classList.add('active');
+  document.body.classList.toggle('settings-no-scroll', tabId === 'settings');
   return true;
 }
 

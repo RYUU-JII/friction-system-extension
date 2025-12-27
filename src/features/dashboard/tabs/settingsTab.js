@@ -5,6 +5,14 @@ import {
   materializeFilterSettings,
 } from '../../../shared/config/index.js';
 import { loadTextContent } from '../../../shared/utils/fileLoader.js';
+import {
+  SETTINGS_PREVIEW_PLATFORMS,
+  applyMockPreviewState,
+  applySettingsPreviewText,
+  createSettingsPreviewMockWindow,
+  normalizeSettingsPreviewPlatformId,
+  takePreviewLines,
+} from './settingsPreviewMockups.js';
 
 const SETTINGS_PREVIEW_TEXT_PATH = 'samples/texts/text_sample_1.txt';
 const SETTINGS_PREVIEW_TEXT_FALLBACK = '샘플 텍스트를 불러오지 못했습니다';
@@ -516,6 +524,16 @@ function seededShuffleWords(text, seedStr, strength = 1) {
 
 export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSettings }) {
   let currentPreviewCategory = 'media';
+  let currentPreviewVariant = 'after';
+  let currentPreviewPlatformId = 'youtube';
+
+  let settingsPreviewBeforeWindow = null;
+  let settingsPreviewAfterWindow = null;
+  let settingsPreviewRenderedPlatformId = null;
+  let settingsPreviewBaseText = '';
+  let settingsPreviewBeforeText = '';
+  let settingsPreviewAfterText = '';
+  let settingsPreviewAfterTextStrength = null;
 
   let selectedMediaPreviewVariant = null;
   let settingsPreviewTextPromise = null;
@@ -524,6 +542,13 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   let settingsPreviewUpdateToken = 0;
   let audioFadeToken = 0;
   let indicatorConfig = { ...INDICATOR_CONFIG_DEFAULT };
+  let settingsPreviewVariantBtns = [];
+  let settingsPreviewPlatformSelects = [];
+
+  let previewHoldTimer = null;
+  let previewHoldActive = false;
+  let previewHoldTriggered = false;
+  let previewHoldPointerId = null;
 
   function storageGet(defaults) {
     return new Promise((resolve) => {
@@ -575,6 +600,14 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     return settingsPreviewAudioEl;
   }
 
+  function prefersReducedMotion() {
+    try {
+      return !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function fadeMediaPreviewAudioTo(targetVolume, { pauseAtEnd = false } = {}) {
     const audio = ensurePreviewAudioEl();
     if (!audio) return;
@@ -589,6 +622,12 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     if (to > 0 && audio.paused) {
       audio.currentTime = 0;
       audio.play().catch(() => {});
+    }
+
+    if (prefersReducedMotion()) {
+      audio.volume = to;
+      if (pauseAtEnd && to === 0) audio.pause();
+      return;
     }
 
     function step(now) {
@@ -615,6 +654,130 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     UI.settingsPreview.addEventListener('mouseleave', () => {
       fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
     });
+  }
+
+  function getEffectivePreviewVariant() {
+    return previewHoldActive ? 'before' : currentPreviewVariant;
+  }
+
+  function applyPreviewVariantState() {
+    if (!UI.settingsPreview) return;
+    const effectiveVariant = getEffectivePreviewVariant();
+    UI.settingsPreview.dataset.previewMode = effectiveVariant;
+
+    settingsPreviewVariantBtns.forEach((btn) => {
+      if (!btn) return;
+      const label = btn.querySelector('[data-preview-variant-label="true"]');
+      if (label) label.textContent = effectiveVariant === 'after' ? 'After' : 'Before';
+      btn.setAttribute('aria-label', effectiveVariant === 'after' ? 'After 미리보기' : 'Before 미리보기');
+    });
+
+    settingsPreviewPlatformSelects.forEach((select) => {
+      if (!select) return;
+      select.value = currentPreviewPlatformId;
+    });
+  }
+
+  function ensurePreviewVariantToggle() {
+    if (!UI.settingsPreview) return;
+
+    const colBefore = UI.previewBefore?.closest?.('.preview-col');
+    const colAfter = UI.previewAfter?.closest?.('.preview-col');
+    if (colBefore) colBefore.dataset.variant = 'before';
+    if (colAfter) colAfter.dataset.variant = 'after';
+
+    UI.settingsPreview.querySelectorAll('.preview-col-label').forEach((el) => el.remove());
+
+    settingsPreviewPlatformSelects = Array.from(
+      UI.settingsPreview.querySelectorAll('select[data-preview-platform-select="true"]')
+    ).filter((node) => node instanceof HTMLSelectElement);
+
+    settingsPreviewPlatformSelects.forEach((select) => {
+      if (select.dataset.populated !== '1') {
+        select.innerHTML = '';
+        SETTINGS_PREVIEW_PLATFORMS.forEach((platform) => {
+          const option = document.createElement('option');
+          option.value = platform.id;
+          option.textContent = platform.label;
+          select.appendChild(option);
+        });
+        select.dataset.populated = '1';
+      }
+
+      if (select.dataset.bound !== '1') {
+        select.dataset.bound = '1';
+        select.addEventListener('change', () => {
+          currentPreviewPlatformId = normalizeSettingsPreviewPlatformId(select.value);
+          applyPreviewVariantState();
+          updateSettingsPreviewV2();
+        });
+      }
+    });
+
+    settingsPreviewVariantBtns = Array.from(
+      UI.settingsPreview.querySelectorAll('button[data-preview-variant-toggle="true"]')
+    ).filter((node) => node instanceof HTMLButtonElement);
+
+    settingsPreviewVariantBtns.forEach((btn) => {
+      if (!btn.querySelector('[data-preview-variant-label="true"]')) {
+        const label = document.createElement('span');
+        label.className = 'settings-preview-mode-pill';
+        label.dataset.previewVariantLabel = 'true';
+        btn.appendChild(label);
+      }
+
+      if (btn.dataset.bound !== '1') {
+        btn.dataset.bound = '1';
+
+        const endHold = (event) => {
+          if (previewHoldPointerId !== null && event?.pointerId !== undefined && event.pointerId !== previewHoldPointerId) return;
+          if (previewHoldTimer) clearTimeout(previewHoldTimer);
+          previewHoldTimer = null;
+          previewHoldPointerId = null;
+          if (!previewHoldActive) return;
+          previewHoldActive = false;
+          applyPreviewVariantState();
+        };
+
+        btn.addEventListener('pointerdown', (event) => {
+          if (!event.isPrimary) return;
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          if (currentPreviewVariant !== 'after') return;
+
+          previewHoldTriggered = false;
+          if (previewHoldTimer) clearTimeout(previewHoldTimer);
+          previewHoldActive = false;
+          previewHoldPointerId = event.pointerId;
+          try {
+            btn.setPointerCapture(event.pointerId);
+          } catch (_) {
+            // noop
+          }
+
+          previewHoldTimer = setTimeout(() => {
+            previewHoldTriggered = true;
+            previewHoldActive = true;
+            applyPreviewVariantState();
+          }, 180);
+        });
+
+        btn.addEventListener('pointerup', endHold);
+        btn.addEventListener('pointercancel', endHold);
+        btn.addEventListener('lostpointercapture', endHold);
+
+        btn.addEventListener('click', () => {
+          if (previewHoldTriggered) {
+            previewHoldTriggered = false;
+            return;
+          }
+          currentPreviewVariant = currentPreviewVariant === 'after' ? 'before' : 'after';
+          applyPreviewVariantState();
+        });
+      }
+    });
+
+    currentPreviewPlatformId = normalizeSettingsPreviewPlatformId(currentPreviewPlatformId);
+    applyPreviewVariantState();
   }
 
   function syncSettingCardUIV2(card) {
@@ -775,6 +938,13 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   function clearFrames() {
     if (UI.previewBefore) UI.previewBefore.innerHTML = '';
     if (UI.previewAfter) UI.previewAfter.innerHTML = '';
+    settingsPreviewBeforeWindow = null;
+    settingsPreviewAfterWindow = null;
+    settingsPreviewRenderedPlatformId = null;
+    settingsPreviewBaseText = '';
+    settingsPreviewBeforeText = '';
+    settingsPreviewAfterText = '';
+    settingsPreviewAfterTextStrength = null;
   }
 
   function setPreviewCategoryFromCard(card) {
@@ -793,7 +963,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
     const isStepRange = control === 'range' && meta.storage === 'step';
 
     const card = document.createElement('div');
-    card.className = 'setting-card';
+    card.className = 'setting-card settings-surface';
     card.dataset.key = key;
     card.dataset.category = meta.category || '';
     if (isToggleOnly) card.classList.add('is-toggle-only');
@@ -809,16 +979,17 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
         ? `
           <div class="setting-shadow-row">
             <div class="setting-shadow-slider">
-              <input
-                id="${inputId}"
-                class="input-value input-range shadow-intensity"
-                data-key="${key}"
-                type="range"
-                value="${shadowState ? shadowState.level : 1}"
-                min="1"
-                max="3"
-                step="1"
-                ${isActive ? '' : 'disabled'}
+               <input
+                 id="${inputId}"
+                 class="input-value input-range shadow-intensity"
+                 data-key="${key}"
+                 type="range"
+                 aria-label="${meta.label} 강도"
+                 value="${shadowState ? shadowState.level : 1}"
+                 min="1"
+                 max="3"
+                 step="1"
+                 ${isActive ? '' : 'disabled'}
               >
               <output class="setting-output" data-shadow-output="true" for="${inputId}" aria-live="polite"></output>
             </div>
@@ -846,17 +1017,18 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
         ? `
           <div class="setting-range-wrap ${isStepRange ? 'is-stepped' : ''}">
             <div class="setting-range-row">
-              <input
-                id="${inputId}"
-                class="input-value input-range"
-                data-key="${key}"
-                type="range"
-                value="${String(inputValue).replace(/\"/g, '&quot;')}"
-                placeholder="${meta.placeholder || ''}"
-                ${meta.min !== undefined ? `min="${meta.min}"` : ''}
-                ${meta.max !== undefined ? `max="${meta.max}"` : ''}
-                ${meta.step !== undefined ? `step="${meta.step}"` : ''}
-                ${isActive ? '' : 'disabled'}
+               <input
+                 id="${inputId}"
+                 class="input-value input-range"
+                 data-key="${key}"
+                 type="range"
+                 aria-label="${meta.label}"
+                 value="${String(inputValue).replace(/\"/g, '&quot;')}"
+                 placeholder="${meta.placeholder || ''}"
+                 ${meta.min !== undefined ? `min="${meta.min}"` : ''}
+                 ${meta.max !== undefined ? `max="${meta.max}"` : ''}
+                 ${meta.step !== undefined ? `step="${meta.step}"` : ''}
+                 ${isActive ? '' : 'disabled'}
               >
             </div>
             ${
@@ -867,19 +1039,20 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           </div>
         `
         : `
-          <input
-            id="${inputId}"
-            class="input-value"
-            data-key="${key}"
-            type="${meta.type === 'number' ? 'number' : 'text'}"
-            value="${String(inputValue).replace(/\"/g, '&quot;')}"
-            placeholder="${meta.placeholder || ''}"
-            ${meta.min ? `min="${meta.min}"` : ''}
-            ${meta.step ? `step="${meta.step}"` : ''}
-            ${isActive ? '' : 'disabled'}
-            style="flex-grow: 1;"
+           <input
+             id="${inputId}"
+             class="input-value"
+             data-key="${key}"
+             type="${meta.type === 'number' ? 'number' : 'text'}"
+             aria-label="${meta.label}"
+             value="${String(inputValue).replace(/\"/g, '&quot;')}"
+             placeholder="${meta.placeholder || ''}"
+             ${meta.min ? `min="${meta.min}"` : ''}
+             ${meta.step ? `step="${meta.step}"` : ''}
+             ${isActive ? '' : 'disabled'}
+             style="flex-grow: 1;"
           >
-          <span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>
+           <span class="setting-output">${meta.unitSuffix || meta.unit || ''}</span>
         `;
     card.innerHTML = `
       <div class="setting-header">
@@ -888,7 +1061,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           <label for="${inputId}">${meta.label}</label>
         </div>
         <label class="switch">
-          <input type="checkbox" class="toggle-active" data-key="${key}" ${isActive ? 'checked' : ''}>
+          <input type="checkbox" class="toggle-active" data-key="${key}" aria-label="${meta.label} 활성화" ${isActive ? 'checked' : ''}>
           <span class="slider"></span>
         </label>
       </div>
@@ -908,106 +1081,115 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
       .sort((a, b) => (a[1].order || 0) - (b[1].order || 0));
   }
 
-  async function updateSettingsPreviewV2() {
-    if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
-    const settings = materializeFilterSettings(getSettings() || {});
-    const token = ++settingsPreviewUpdateToken;
+  function computeSettingsPreviewAfterText(baseText, settings, strengthOverride = null) {
+    const strength = strengthOverride === null ? getTextShuffleProbability(settings) : strengthOverride;
+    if (strength <= 0) return { text: baseText, strength };
+    return { text: seededShuffleWords(baseText, `friction-preview-text-${strength}`, strength), strength };
+  }
+
+  function applySettingsPreviewV2(materializedSettings = null) {
+    if (!UI.settingsPreview) return;
+
     const previewCategory = currentPreviewCategory;
-
-    clearFrames();
-
     if (previewCategory !== 'media') {
       fadeMediaPreviewAudioTo(0, { pauseAtEnd: true });
-    }
-
-    if (previewCategory === 'media') {
-      if (UI.settingsPreviewDescription) {
-        UI.settingsPreviewDescription.textContent =
-          '왼쪽은 원본, 오른쪽은 현재 설정된 미디어 필터가 적용된 결과입니다.';
-      }
-
+    } else {
       const variant = ensurePreviewMediaVariant();
-
       const audio = ensurePreviewAudioEl();
       if (audio) {
         const nextSrc = variant.audioUrl ? resolveAssetUrl(String(variant.audioUrl)) : '';
-        if (nextSrc && audio.getAttribute('src') !== nextSrc) {
+        const srcChanged = !!nextSrc && audio.getAttribute('src') !== nextSrc;
+        if (srcChanged) {
           audio.pause();
           audio.currentTime = 0;
           audio.setAttribute('src', nextSrc);
           audio.load();
+          audio.volume = 0;
         }
-        audio.volume = 0;
       }
-
-      const before = document.createElement('div');
-      before.className = 'preview-media';
-      const after = document.createElement('div');
-      after.className = 'preview-media';
-
-      const ib = document.createElement('img');
-      ib.src = resolveAssetUrl(variant.url);
-      ib.alt = variant.label;
-      ib.className = 'preview-image';
-      ib.decoding = 'async';
-
-      const ia = ib.cloneNode(true);
-      before.appendChild(ib);
-      after.appendChild(ia);
-
-      const filterParts = [];
-      if (settings?.blur?.isActive) filterParts.push(`blur(${settings.blur.value})`);
-      if (settings?.saturation?.isActive) filterParts.push(`saturate(${settings.saturation.value})`);
-      if (filterParts.length > 0) {
-        ia.style.filter = filterParts.join(' ');
-        ia.style.willChange = 'filter';
-      }
-
-      UI.previewBefore.appendChild(before);
-      UI.previewAfter.appendChild(after);
-      return;
     }
 
-    if (previewCategory === 'text') {
-      if (UI.settingsPreviewDescription) {
-        UI.settingsPreviewDescription.textContent = '왼쪽은 원본, 오른쪽은 현재 설정된 텍스트 필터가 적용된 결과입니다.';
-      }
+    if (!settingsPreviewBeforeWindow || !settingsPreviewAfterWindow) return;
 
-      const originalText = await ensurePreviewText();
-      if (token !== settingsPreviewUpdateToken) return;
+    const settings = materializedSettings || materializeFilterSettings(getSettings() || {});
 
-      const before = document.createElement('div');
-      before.className = 'preview-text';
-      before.textContent = originalText;
+    settingsPreviewBeforeWindow.dataset.focus = previewCategory;
+    settingsPreviewAfterWindow.dataset.focus = previewCategory;
 
-      const after = document.createElement('div');
-      after.className = 'preview-text';
+    applyMockPreviewState(settingsPreviewBeforeWindow, null);
+    applyMockPreviewState(settingsPreviewAfterWindow, settings);
 
-      const strength = getTextShuffleProbability(settings);
-      const shuffled = strength > 0 ? seededShuffleWords(originalText, `friction-preview-${strength}`, strength) : originalText;
-      after.textContent = shuffled;
+    const baseText = settingsPreviewBaseText;
+    if (!baseText) return;
 
-      if (settings?.letterSpacing?.isActive) after.style.letterSpacing = String(settings.letterSpacing.value);
-      if (settings?.textOpacity?.isActive) {
-        const opacity = parseFloat(String(settings.textOpacity.value));
-        if (Number.isFinite(opacity)) after.style.opacity = String(opacity);
-      }
-      if (settings?.textShadow?.isActive) after.style.textShadow = String(settings.textShadow.value);
-
-      UI.previewBefore.appendChild(before);
-      UI.previewAfter.appendChild(after);
-      return;
+    if (baseText !== settingsPreviewBeforeText) {
+      applySettingsPreviewText(settingsPreviewBeforeWindow, baseText);
+      settingsPreviewBeforeText = baseText;
     }
 
-    if (UI.settingsPreviewDescription) UI.settingsPreviewDescription.textContent = '지금은 미리보기가 없습니다.';
-    const placeholderBefore = document.createElement('div');
-    placeholderBefore.className = 'preview-placeholder';
-    placeholderBefore.textContent = '미리 보기 없음';
-    const placeholderAfter = document.createElement('div');
-    placeholderAfter.className = 'preview-placeholder';
-    placeholderAfter.textContent = '미리 보기 없음';
-    UI.previewBefore.appendChild(placeholderBefore);
-    UI.previewAfter.appendChild(placeholderAfter);
+    const strength = getTextShuffleProbability(settings);
+    let afterText = settingsPreviewAfterText;
+    if (settingsPreviewAfterTextStrength === null || settingsPreviewAfterTextStrength !== strength || !afterText) {
+      afterText = computeSettingsPreviewAfterText(baseText, settings, strength).text;
+      settingsPreviewAfterTextStrength = strength;
+    }
+
+    if (afterText !== settingsPreviewAfterText) {
+      applySettingsPreviewText(settingsPreviewAfterWindow, afterText);
+      settingsPreviewAfterText = afterText;
+    }
+  }
+
+  async function renderSettingsPreviewV2({ force = false } = {}) {
+    if (!UI.settingsPreview || !UI.previewBefore || !UI.previewAfter) return;
+
+    currentPreviewPlatformId = normalizeSettingsPreviewPlatformId(currentPreviewPlatformId);
+    const platformId = currentPreviewPlatformId;
+
+    const needsRender =
+      force ||
+      !settingsPreviewBeforeWindow ||
+      !settingsPreviewAfterWindow ||
+      settingsPreviewRenderedPlatformId !== platformId;
+    if (!needsRender) return;
+
+    const token = ++settingsPreviewUpdateToken;
+    const originalText = await ensurePreviewText();
+    if (token !== settingsPreviewUpdateToken) return;
+
+    const baseText = takePreviewLines(originalText, 4);
+    const variant = ensurePreviewMediaVariant();
+    const previewCategory = currentPreviewCategory;
+
+    clearFrames();
+    settingsPreviewBaseText = baseText;
+    settingsPreviewRenderedPlatformId = platformId;
+
+    settingsPreviewBeforeWindow = createSettingsPreviewMockWindow({
+      platformId,
+      variant,
+      baseText,
+      settings: null,
+      focusCategory: previewCategory,
+      resolveAssetUrl,
+    });
+
+    settingsPreviewAfterWindow = createSettingsPreviewMockWindow({
+      platformId,
+      variant,
+      baseText,
+      settings: null,
+      focusCategory: previewCategory,
+      resolveAssetUrl,
+    });
+
+    UI.previewBefore.appendChild(settingsPreviewBeforeWindow);
+    UI.previewAfter.appendChild(settingsPreviewAfterWindow);
+  }
+
+  async function updateSettingsPreviewV2({ forceRender = false } = {}) {
+    await renderSettingsPreviewV2({ force: forceRender });
+    applySettingsPreviewV2();
   }
 
   function displaySettingsV2() {
@@ -1054,6 +1236,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
   function setup() {
     setupMediaPreviewHoverAudio();
+    ensurePreviewVariantToggle();
 
     if (UI.settingsIndicatorToggle) {
       UI.settingsIndicatorToggle.addEventListener('change', () => {
@@ -1100,7 +1283,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
 
           syncSettingCardUIV2(card);
           collectSettingsFromGridV2();
-          updateSettingsPreviewV2();
+          applySettingsPreviewV2();
           persistCurrentSettings().catch(() => {});
         }
       });
@@ -1115,7 +1298,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           setPreviewCategoryFromCard(card);
           syncSettingCardUIV2(card);
           collectSettingsFromGridV2();
-          updateSettingsPreviewV2();
+          applySettingsPreviewV2();
           persistCurrentSettings().catch(() => {});
           return;
         }
@@ -1124,7 +1307,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           setPreviewCategoryFromCard(card);
           syncSettingCardUIV2(card);
           collectSettingsFromGridV2();
-          updateSettingsPreviewV2();
+          applySettingsPreviewV2();
           persistCurrentSettings().catch(() => {});
         }
       });
@@ -1139,7 +1322,7 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
           setPreviewCategoryFromCard(card);
           syncSettingCardUIV2(card);
           collectSettingsFromGridV2();
-          updateSettingsPreviewV2();
+          applySettingsPreviewV2();
         }
       });
     }
@@ -1149,6 +1332,8 @@ export function createSettingsTab({ UI, getSettings, setSettings, mergeFilterSet
   async function display() {
     displaySettingsV2();
     await loadIndicatorConfig();
+    ensurePreviewVariantToggle();
+    applyPreviewVariantState();
     await updateSettingsPreviewV2();
   }
 

@@ -294,34 +294,36 @@
           </div>
         </header>
 
-        <div class="settings-layout">
-          <div class="card settings-preview" id="settingsPreview">
-          <div class="settings-preview-header">
-            <div class="settings-preview-title">
-              <h3 style="margin: 0">예시 미리보기</h3>
-              <p id="settingsPreviewDescription" style="margin: 6px 0 0; color: var(--text-muted); font-size: 13px"></p>
-            </div>
-          </div>
-          <div class="settings-preview-body">
-            <div class="settings-preview-grid">
-              <div class="preview-col">
-                <div class="preview-col-label">Before</div>
-                <div class="preview-frame" id="previewBefore"></div>
-              </div>
-              <div class="preview-col">
-                <div class="preview-col-label">After</div>
-                <div class="preview-frame" id="previewAfter"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div class="settings-layout-container">
+          <div class="card settings-grid-pane settings-grid" id="settingsGrid"></div>
 
-        <div class="card settings-panel">
-          <div class="settings-panel-body">
-            <div class="settings-grid" id="settingsGrid"></div>
+          <div class="settings-preview-pane settings-preview" id="settingsPreview">
+            <div class="settings-preview-body">
+              <div class="settings-preview-stage">
+                <div class="preview-frame device-mockup">
+                  <div class="device-mockup-top">
+                    <div class="device-mockup-dots" aria-hidden="true">
+                      <span class="device-dot device-dot-close"></span>
+                      <span class="device-dot device-dot-min"></span>
+                      <span class="device-dot device-dot-max"></span>
+                    </div>
+                    <div class="device-mockup-omnibox">
+                      <span class="device-mockup-scheme" aria-hidden="true">momentum://</span>
+                      <select class="device-mockup-site-select" data-preview-platform-select="true" aria-label="플랫폼 선택"></select>
+                    </div>
+                    <button type="button" class="device-mockup-variant-btn" data-preview-variant-toggle="true" aria-label="After/Before 전환">
+                      <span class="settings-preview-mode-pill" data-preview-variant-label="true"></span>
+                    </button>
+                  </div>
+                  <div class="device-mockup-viewport">
+                    <div class="preview-layer" id="previewBefore"></div>
+                    <div class="preview-layer" id="previewAfter"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
       </section>
 
       <section id="util" class="tab-content">
