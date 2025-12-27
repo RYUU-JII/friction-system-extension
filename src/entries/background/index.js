@@ -73,7 +73,7 @@ function createEmptyTickBuffer() {
 }
 
 const DEFAULT_NUDGE_CONFIG = {
-    enabled: true,
+    enabled: false,
     thresholdMs: 30 * 60 * 1000,
     spriteSizePx: 96,
     baseSpeedPxPerSec: 140,
@@ -151,9 +151,11 @@ function handleIdleStateChange(state) {
 
 function mergeNudgeConfig(partial) {
     const src = partial && typeof partial === 'object' ? partial : {};
+    const enabled = typeof src.enabled === 'boolean' ? src.enabled : DEFAULT_NUDGE_CONFIG.enabled;
     return {
         ...DEFAULT_NUDGE_CONFIG,
         ...src,
+        enabled,
         asset: {
             ...DEFAULT_NUDGE_CONFIG.asset,
             ...(src.asset && typeof src.asset === 'object' ? src.asset : {}),
@@ -939,16 +941,23 @@ async function sendFrictionMessage(tabId, url) {
           startMin: 0,
           endMin: 1440,
         },
+        indicatorConfig: { enabled: true },
     });
     const filterSettings = await dataManager.getFilterSettings();
     const hostname = getHostname(url);
-    const shouldApply = hostname && items.blockedUrls.includes(hostname) && isFrictionTime(items.schedule);
+    const isBlockedDomain = !!(hostname && items.blockedUrls.includes(hostname));
+    const shouldApply = isBlockedDomain && isFrictionTime(items.schedule);
     const filters = materializeFilterSettings(filterSettings || DEFAULT_FILTER_SETTINGS);
+    const indicatorEnabled =
+        typeof items.indicatorConfig?.enabled === 'boolean' ? items.indicatorConfig.enabled : true;
 
     try {
         await chrome.tabs.sendMessage(tabId, {
             isBlocked: shouldApply,
+            isBlockedDomain,
+            hostname,
             filters,
+            indicatorEnabled,
         });
     } catch (e) {}
 
@@ -1172,6 +1181,73 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (action === 'REFRESH_SETTINGS') {
         broadcastSettingsUpdate().then(() => sendResponse({ success: true }));
+        return true;
+    }
+
+    if (action === 'SETTINGS_UPDATED') {
+        broadcastSettingsUpdate().then(() => sendResponse({ success: true }));
+        return true;
+    }
+
+    if (action === 'NUDGE_CONFIG_UPDATED') {
+        (async () => {
+            const items = await chrome.storage.local.get({ nudgeConfig: {} });
+            const config = mergeNudgeConfig(items.nudgeConfig);
+            if (!config.enabled) {
+                const tabs = await chrome.tabs.query({});
+                await Promise.all(
+                    tabs
+                        .filter((tab) => tab?.id && tab.url && !tab.url.startsWith('chrome://'))
+                        .map((tab) =>
+                            chrome.tabs.sendMessage(tab.id, { type: 'NUDGE_STOP' }).catch(() => {})
+                        )
+                );
+            }
+            sendResponse({ success: true });
+        })().catch(() => sendResponse({ success: false }));
+        return true;
+    }
+
+    if (action === 'GET_FILTER_INDICATOR_INFO') {
+        (async () => {
+            const targetUrl = request.url || sender?.tab?.url || '';
+            const hostname = getHostname(targetUrl);
+            const items = await chrome.storage.local.get({
+                blockedUrls: [],
+                schedule: {
+                  scheduleActive: false,
+                  days: [0, 1, 2, 3, 4, 5, 6],
+                  blocks: [{ startMin: 0, endMin: 1440 }],
+                  startMin: 0,
+                  endMin: 1440,
+                },
+                indicatorConfig: { enabled: true },
+            });
+            const isBlockedDomain = !!(hostname && items.blockedUrls.includes(hostname));
+            const shouldApply = isBlockedDomain && isFrictionTime(items.schedule);
+            const indicatorEnabled =
+                typeof items.indicatorConfig?.enabled === 'boolean' ? items.indicatorConfig.enabled : true;
+
+            const filterSettings = await dataManager.getFilterSettings();
+            const filters = materializeFilterSettings(filterSettings || DEFAULT_FILTER_SETTINGS);
+
+            await loadStatsCache();
+            const dateStr = getLocalDateStr();
+            const domainData = hostname ? statsCache?.dates?.[dateStr]?.domains?.[hostname] : null;
+            const dailyMs = ensureNumber(domainData?.active) + ensureNumber(domainData?.background);
+
+            sendResponse({
+                success: true,
+                hostname,
+                isBlockedDomain,
+                shouldApply,
+                indicatorEnabled,
+                dailyMs,
+                filters,
+            });
+        })().catch(() => {
+            sendResponse({ success: false });
+        });
         return true;
     }
 

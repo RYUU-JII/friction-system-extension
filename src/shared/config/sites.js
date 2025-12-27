@@ -16,7 +16,7 @@ const BASE_SELECTORS = {
   
   textTargets: ':is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, a, span[role="text"])',
   
-  overlayExempt: ':is([role="dialog"], [aria-modal="true"])',
+  overlayExempt: ':is([role="dialog"], [aria-modal="true"], [data-friction-indicator="1"])',
 
   textShuffleExcludedClosest: [
     'script', 'style', 'noscript', 'textarea', 'input', 'select', 'option', 'pre', 'code', 'svg', 'math',
