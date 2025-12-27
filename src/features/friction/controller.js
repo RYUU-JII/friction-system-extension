@@ -7,6 +7,7 @@ import InteractionManager from './interactionManager.js';
 import NudgeGame from './nudgeGame.js';
 import BehaviorSensor from './behaviorSensor.js';
 import VideoSkipManager from './videoSkipManager.js';
+import StatusIndicator from './statusIndicator.js';
 
 function clearAllFriction() {
   VisualManager.remove();
@@ -51,6 +52,12 @@ export function initFrictionController() {
 
     if (typeof request?.isBlocked === 'boolean' && !request.isBlocked) {
       clearAllFriction();
+      StatusIndicator.update({
+        isBlocked: false,
+        isBlockedDomain: request.isBlockedDomain,
+        filters: request.filters,
+        indicatorEnabled: request.indicatorEnabled,
+      });
       sendResponse?.({ ok: true });
       return false;
     }
@@ -75,6 +82,12 @@ export function initFrictionController() {
 
     TextManager.update(filters);
     TextShuffleManager.update(filters.textShuffle);
+    StatusIndicator.update({
+      isBlocked: true,
+      isBlockedDomain: request.isBlockedDomain,
+      filters,
+      indicatorEnabled: request.indicatorEnabled,
+    });
     sendResponse?.({ ok: true });
     return false;
   });

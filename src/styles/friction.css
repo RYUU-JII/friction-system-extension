@@ -172,3 +172,293 @@ html[data-friction-social-metrics="1"] [data-friction-social-exposure="1"] {
   transform: translate3d(0, 0, 0);
   will-change: transform;
 }
+
+/* Filter status indicator */
+.friction-status-indicator {
+  all: initial;
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483646;
+  font-family: 'Pretendard', -apple-system, sans-serif;
+  --indicator-bg: rgba(255, 255, 255, 0.88);
+  --indicator-border: rgba(148, 163, 184, 0.24);
+  --indicator-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  --indicator-text: #1e293b;
+  --indicator-muted: #64748b;
+  --indicator-accent: #8aad94;
+  --indicator-accent-soft: rgba(138, 173, 148, 0.16);
+  --indicator-radius: 16px;
+  color: var(--indicator-text);
+  pointer-events: auto;
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  .friction-status-indicator {
+    --indicator-bg: rgba(36, 40, 44, 0.86);
+    --indicator-border: rgba(255, 255, 255, 0.08);
+    --indicator-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+    --indicator-text: #e2e4e9;
+    --indicator-muted: #9199a5;
+    --indicator-accent: #8aad94;
+    --indicator-accent-soft: rgba(138, 173, 148, 0.18);
+  }
+}
+.friction-status-indicator *,
+.friction-status-indicator *::before,
+.friction-status-indicator *::after {
+  box-sizing: border-box;
+}
+.friction-status-indicator__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--indicator-bg);
+  border: 1px solid var(--indicator-border);
+  box-shadow: var(--indicator-shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+}
+.friction-status-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--indicator-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--indicator-accent) 30%, transparent),
+    0 0 10px color-mix(in srgb, var(--indicator-accent) 60%, transparent);
+}
+.friction-status-indicator[data-state="off"] .friction-status-indicator__pill {
+  background: color-mix(in srgb, var(--indicator-bg) 80%, transparent);
+  border-color: color-mix(in srgb, var(--indicator-border) 80%, transparent);
+  color: var(--indicator-muted);
+}
+.friction-status-indicator[data-state="off"] .friction-status-indicator__dot {
+  background: var(--indicator-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--indicator-muted) 30%, transparent);
+  animation: none;
+}
+.friction-status-indicator[data-state="on"] .friction-status-indicator__dot {
+  animation: indicatorPulse 2.4s ease-in-out infinite;
+}
+.friction-status-indicator__tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: 200px;
+  padding: 12px;
+  border-radius: var(--indicator-radius);
+  background: var(--indicator-bg);
+  border: 1px solid var(--indicator-border);
+  box-shadow: var(--indicator-shadow);
+  color: var(--indicator-text);
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.friction-status-indicator[data-tooltip-position^="bottom"] .friction-status-indicator__tooltip {
+  top: calc(100% + 10px);
+  bottom: auto;
+  transform: translateY(-6px);
+}
+.friction-status-indicator[data-tooltip-position^="top"] .friction-status-indicator__tooltip {
+  bottom: calc(100% + 10px);
+  top: auto;
+  transform: translateY(6px);
+}
+.friction-status-indicator[data-tooltip-position$="left"] .friction-status-indicator__tooltip {
+  left: 0;
+  right: auto;
+}
+.friction-status-indicator[data-tooltip-position$="right"] .friction-status-indicator__tooltip {
+  right: 0;
+  left: auto;
+}
+.friction-status-indicator:hover .friction-status-indicator__tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.friction-status-indicator.is-dragging .friction-status-indicator__pill {
+  cursor: grabbing;
+}
+.friction-status-indicator.is-dragging .friction-status-indicator__tooltip {
+  opacity: 0;
+  pointer-events: none;
+}
+.friction-status-indicator__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.friction-status-indicator__divider {
+  height: 1px;
+  background: var(--indicator-border);
+  margin: 10px 0;
+}
+.friction-status-indicator__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.friction-status-indicator__row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: start;
+  gap: 10px;
+}
+.friction-status-indicator__row--filters {
+  align-items: start;
+}
+.friction-status-indicator__url-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.friction-status-indicator__status-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.friction-status-indicator__favicon-wrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--indicator-border);
+  background: color-mix(in srgb, var(--indicator-bg) 94%, var(--indicator-border));
+  overflow: hidden;
+}
+.friction-status-indicator__favicon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)) saturate(0.85);
+  z-index: 2;
+}
+.friction-status-indicator__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--indicator-accent);
+  opacity: 0.16;
+  filter: blur(8px);
+  animation: faviconGlow 3s infinite ease-in-out;
+  z-index: 0;
+}
+.friction-status-indicator[data-state="off"] .friction-status-indicator__pulse {
+  opacity: 0.08;
+  animation: none;
+}
+.friction-status-indicator__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--indicator-border) 70%, transparent);
+  color: var(--indicator-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.friction-status-indicator__url {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--indicator-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.friction-status-indicator__label {
+  color: var(--indicator-muted);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.friction-status-indicator__data {
+  text-align: left;
+  color: var(--indicator-text);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.friction-status-indicator__filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.friction-status-indicator__filter-item {
+  color: var(--indicator-accent);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.45;
+  position: relative;
+  padding-left: 12px;
+}
+.friction-status-indicator__filter-item::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--indicator-accent);
+}
+.indicator-time-unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--indicator-muted);
+  margin: 0 6px 0 4px;
+}
+.indicator-time-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--indicator-text);
+}
+@keyframes faviconGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.16;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.28;
+  }
+}
+@keyframes indicatorPulse {
+  0% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--indicator-accent) 22%, transparent),
+      0 0 10px color-mix(in srgb, var(--indicator-accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--indicator-accent) 12%, transparent),
+      0 0 18px color-mix(in srgb, var(--indicator-accent) 65%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--indicator-accent) 22%, transparent),
+      0 0 10px color-mix(in srgb, var(--indicator-accent) 55%, transparent);
+  }
+}
