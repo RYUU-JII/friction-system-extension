@@ -39,13 +39,8 @@
 }
 #settings.tab-content.active {
     display: flex !important;
-    height: calc(100vh - 116px);
-    overflow: hidden;
-}
-body.settings-no-scroll {
-    overflow: hidden;
-}
-body.settings-no-scroll .main-content {
+    flex: 1;
+    height: 100%;
     overflow: hidden;
 }
 #settings > header {
@@ -105,7 +100,7 @@ body.settings-no-scroll .main-content {
 .settings-layout-container,
 .settings-layout {
     --settings-sticky-top: 20px;
-    --settings-layout-height: 100%;
+    --settings-layout-height: calc(100vh - 260px);
     --settings-panel-width: 250px;
     --settings-gutter: 40px;
 
@@ -113,8 +108,10 @@ body.settings-no-scroll .main-content {
     grid-template-columns: var(--settings-panel-width) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     gap: var(--settings-gutter);
+    
     align-items: start;
-    height: auto;
+    height: var(--settings-layout-height);
+    max-height: var(--settings-layout-height);
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -169,6 +166,7 @@ body.settings-no-scroll .main-content {
     display: flex;
     flex-direction: column;
     padding: 20px;
+    height: 100%;
     min-height: 0;
     box-shadow: var(--shadow-md);
     overflow: auto;
@@ -232,9 +230,10 @@ body.settings-no-scroll .main-content {
     .settings-layout-container,
     .settings-layout {
         grid-template-columns: 1fr;
-        height: auto;
+        height: var(--settings-layout-height);
+        max-height: var(--settings-layout-height);
         min-height: 0;
-        overflow: visible;
+        overflow: hidden;
     }
     .settings-layout-container::before,
     .settings-layout::before {
@@ -242,7 +241,7 @@ body.settings-no-scroll .main-content {
     }
     .settings-preview-pane {
         position: static;
-        max-height: none;
+        max-height: calc(var(--settings-layout-height) - var(--settings-sticky-top));
     }
 }
 .settings-surface {
